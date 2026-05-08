@@ -1,0 +1,1 @@
+# GET /scans routes

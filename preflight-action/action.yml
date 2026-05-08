@@ -1,0 +1,5 @@
+name: 'Preflight Supply Chain Scan'
+description: 'Behavioral pre-execution interceptor for npm packages'
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
