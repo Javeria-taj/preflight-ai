@@ -55,6 +55,8 @@ export interface LlmReasoningSignal {
   confidence: number;          // 0.0–1.0
   summary: string;             // max 2 sentences, human-readable
   attack_pattern: string | null; // e.g. "npm_account_hijack_rat_deployment"
+  // NOTE: no `flagged` field in the API response.
+  // Derive it in the frontend: flagged = verdict !== "PASS"
 }
 
 export interface SignalsResponse {
@@ -72,34 +74,34 @@ export interface AnalyzeResponse {
   signals: SignalsResponse;
 }
 
-// ─── GET /scans ─────────────────────────────────────────────────────────────
+// ─── GET /scans + GET /scans/:id ────────────────────────────────────────────
+// IMPORTANT: the API returns the *full* document for both endpoints.
+// There is no projection — both list items and detail have identical shapes.
 
-export interface ScanSummary {
-  scan_id: string;
+export interface ScanDetail {
+  scan_id: string;             // MongoDB ObjectId hex, e.g. "64a7f3e2b1c4d5e6f7a8b9c0"
   package_name: string;
   old_version: string | null;
   new_version: string;
   verdict: Verdict;
   confidence: number;
   duration_ms: number;
-  scanned_at: string;          // ISO 8601 UTC, e.g. "2026-05-09T14:23:00+00:00"
-}
-
-export interface ScansListResponse {
-  scans: ScanSummary[];
-  page: number;
-  limit: number;
-}
-
-// ─── GET /scans/:id ─────────────────────────────────────────────────────────
-
-export interface ScanDetail extends ScanSummary {
+  scanned_at: string;          // ISO 8601 UTC
+  created_at: string;          // ISO 8601 UTC
   repo: string | null;
   pr_number: number | null;
   is_demo: boolean;
   signals: SignalsResponse;
-  created_at: string;
 }
+
+export interface ScansListResponse {
+  scans: ScanDetail[];         // full scan objects, not a trimmed summary
+  page: number;
+  limit: number;
+}
+
+// ScanSummary alias kept for compatibility
+export type ScanSummary = ScanDetail;
 
 // ─── GET /packages/:name/threat ─────────────────────────────────────────────
 
@@ -336,3 +338,182 @@ NEXT_PUBLIC_POLL_INTERVAL_MS=10000
 ```
 
 Set these in Vercel dashboard under Settings → Environment Variables.
+
+---
+
+## Frontend Integration Notes
+
+Findings from reading the current `preflight-web/` code against the live API. These are gaps that need to be closed when wiring static data to real API calls.
+
+---
+
+### 1. Field name mapping — API (snake_case) → frontend data shape
+
+The current `lib/data.ts` uses camelCase and different field names than the API. When replacing mock data, apply this mapping:
+
+| API field | Frontend `lib/data.ts` equivalent | Notes |
+|---|---|---|
+| `scan_id` | `id` | rename on receipt |
+| `package_name` | `package` | rename on receipt |
+| `old_version` | `from` | rename on receipt |
+| `new_version` | `to` | rename on receipt |
+| `duration_ms` | `duration` | rename on receipt |
+| `scanned_at` | `time` (relative) / `scannedAt` | format as relative for ScanCard, ISO for ScanDetail |
+| `signals.llm_reasoning.attack_pattern` | `attackPattern` | camelCase in ScanDetail |
+
+Suggested normalizer for `ScanCard` / dashboard feed:
+
+```typescript
+function normalizeScan(raw: ScanDetail) {
+  return {
+    id: raw.scan_id,
+    package: raw.package_name,
+    from: raw.old_version,
+    to: raw.new_version,
+    verdict: raw.verdict,
+    confidence: raw.confidence,
+    duration: raw.duration_ms,
+    time: formatRelative(raw.scanned_at), // your relative-time helper
+    repo: raw.repo ?? "",
+    pr: raw.pr_number,
+    summary: raw.signals.llm_reasoning.summary,
+    signals: signalsToArray(raw.signals),  // see §3 below
+  };
+}
+```
+
+---
+
+### 2. `llm_reasoning` has no `flagged` field
+
+The backend's `LlmReasoningSignal` does not include `flagged`. The `ScanCard` and `SignalPill` components require `flagged: boolean` on all four signals.
+
+Derive it:
+```typescript
+const llmFlagged = raw.signals.llm_reasoning.verdict !== "PASS";
+```
+
+---
+
+### 3. Signal object → array normalization for `ScanCard`
+
+`ScanCard` expects `scan.signals` as `Array<{ name: string; flagged: boolean }>`. The API returns signals as a named object. Convert:
+
+```typescript
+function signalsToArray(signals: SignalsResponse) {
+  return [
+    { name: "Script Diff", flagged: signals.script_diff.flagged },
+    { name: "AST Scan",    flagged: signals.ast_scan.flagged },
+    { name: "Maintainer",  flagged: signals.maintainer.flagged },
+    { name: "Gemini AI",   flagged: signals.llm_reasoning.verdict !== "PASS" },
+  ];
+}
+```
+
+---
+
+### 4. Demo scan ID — critical link fix
+
+The demo page verdict card currently links to `/scans/scn_a1f7e2` (a fake ID). The real pre-seeded demo scan in MongoDB has ID:
+
+```
+64a7f3e2b1c4d5e6f7a8b9c0
+```
+
+The "Full scan detail" button on `/demo` and the `SCAN_DETAIL_AXIOS.id` in `lib/data.ts` should both use this ID. The `/scans/[id]` page validates it via `GET /scans/64a7f3e2b1c4d5e6f7a8b9c0`.
+
+---
+
+### 5. Wiring `/demo` page to the real API
+
+The current `/demo` page (`app/demo/page.tsx`) uses only static data — it runs a CSS animation with hardcoded `TRACE_LINES` and never calls the API. To wire it:
+
+```typescript
+// In start():
+const result = await runAnalysis({
+  package_name: "axios",
+  old_version: "1.7.9",
+  new_version: "1.7.10",
+  demo: true,  // returns pre-seeded result with artificial ~2.7s delay
+});
+// result is AnalyzeResponse — use result.signals for signal rows,
+// result.confidence / result.verdict for the verdict card
+```
+
+The API stagger delays (~500ms per signal) mean the response arrives ~2.7s after the request — the existing animation timing (600ms per signal row) aligns well with this.
+
+---
+
+### 6. Wiring `/scans/[id]` page to the real API
+
+The current `app/scans/[id]/page.tsx` ignores the route param and always renders `SCAN_DETAIL_AXIOS`. To wire it:
+
+```typescript
+"use client";
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { getScan } from "@/lib/api";
+
+export default function ScanDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const [scan, setScan] = useState<ScanDetail | null>(null);
+
+  useEffect(() => {
+    getScan(id).then(setScan).catch(console.error);
+  }, [id]);
+
+  if (!scan) return <div>Loading…</div>;
+  // render using real `scan` data
+}
+```
+
+**Note:** The API response does not include `iocs[]`, `model` name, or kill-chain timeline — those are frontend-only display constructs in `lib/data.ts` (hardcoded for the demo). Keep them static for the demo scan; omit for real scans.
+
+---
+
+### 7. `GET /scans` — list returns full documents
+
+`GET /scans` returns the complete scan object (same shape as `GET /scans/:id`) for each item — not a trimmed summary. The `ScanCard` expanded view can therefore read `signals` and `summary` directly from the list response without a separate per-scan fetch.
+
+---
+
+### 8. Stats counters — no dedicated endpoint
+
+The landing page shows three `StatCounter` values: "Repos protected", "Scans completed", "Threats blocked". There is no `/stats` endpoint. Options:
+
+- Keep them as realistic-looking static numbers for the hackathon demo (current approach — fine for presentation)
+- Approximate from `GET /scans?limit=1` (the `page`/`limit` response gives no total count — backend would need a COUNT query)
+- Derive "Threats blocked" from `GET /packages/top-threats` block counts
+
+Recommended for hackathon: leave static. The counters animate convincingly and judges won't live-verify them.
+
+---
+
+### 9. Action YAML — input name correction
+
+`lib/data.ts` `INSTALL_YAML` currently shows:
+
+```yaml
+uses: preflight-ai/action@v1
+with:
+  fail-on: BLOCK     # ← WRONG
+  comment: true      # ← doesn't exist as an input
+```
+
+The actual `action.yml` inputs are:
+
+```yaml
+uses: preflight-ai/preflight@v1.0.0
+with:
+  lockfile: package-lock.json   # optional, default shown
+  fail_on_block: true           # boolean — use this, not fail-on
+  # api_url: https://preflight-api.onrender.com  # optional override
+```
+
+`comment` is not an input — PR comments are always posted automatically on BLOCK/WARN. Use `@v1.0.0` (pinned tag), never `@v1` (mutable).
+
+---
+
+### 10. Ticker component — wiring to live feed
+
+`Ticker` (rendered in the global layout) uses static `TICKER_FEED` from `lib/data.ts`. To make it live, replace with `GET /scans?limit=10` polled every 10s and format `scanned_at` as a relative timestamp. Not required for hackathon — static ticker is indistinguishable during a 3-minute demo.
