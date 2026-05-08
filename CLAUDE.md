@@ -1,1 +1,756 @@
-# Preflight Development Notes
+# Preflight — Project Context for Claude Code
+
+---
+
+## What Is Preflight
+
+**Preflight** is an AI-powered npm supply chain security agent that runs as a GitHub Action.
+It intercepts dependency upgrades on pull requests and detects malicious packages
+*before* they run — catching novel attacks that CVE-based tools like `npm audit`,
+Snyk, and Dependabot completely miss.
+
+**The real-world anchor**: On March 31, 2026, a North Korean state actor (Sapphire Sleet)
+hijacked the `axios` npm account (70M+ weekly downloads) and shipped a RAT via a
+legitimate-looking version bump. `npm audit` missed it. Snyk missed it. Dependabot missed it.
+Because the package was legitimately signed and had no CVE. Preflight would have caught it
+in under 30 seconds through behavioral analysis.
+
+---
+
+## Hackathon Context
+
+- **Event**: NMIT Hacks, May 8–10, 2026 (48 hours)
+- **Track**: AI & ML
+- **Team**: 2 — Rafi (backend, this repo), teammate (frontend dashboard)
+- **Judge pitch**: 3 minutes + live demo
+- **Winning criteria**: Real incident anchor, live demo, one-line install
+
+### Sponsor Integrations (required for prizes)
+
+| Sponsor | How we use it | Tier |
+|---|---|---|
+| GitHub | Core distribution — GitHub Action IS the product | 1 |
+| Google Cloud + Gemini | LLM reasoning layer — `gemini-2.5-flash` + `gemini-2.5-pro` | 1 |
+| MongoDB Atlas | Community threat intelligence — `preflight_db` | 1 |
+| Render | FastAPI deployment hosting | 1 |
+| ElevenLabs | Voice BLOCK alert on demo page (stretch) | 2 |
+| Snowflake | Analytics pipeline (stretch) | 2 |
+| Solana | Immutable audit log (stretch) | 3 |
+
+---
+
+## The Detection Engine — 4 Layers
+
+Every package upgrade is analyzed through four sequential signal layers:
+
+```
+1. Script Diff Analysis
+   → Fetch tarballs for old + new version from npm registry
+   → Extract pre/postinstall/install scripts from package.json inside tarball
+   → Diff scripts between versions
+   → Flag: new hooks added (HIGH), existing hooks modified (MEDIUM)
+
+2. AST Behavioral Scan
+   → Shell scanner FIRST (regex): curl, wget, bash -c, base64 -d, eval $(...)
+   → If hook is node <file>, extract that file from tarball and parse with acorn via subprocess
+   → If hook is inline JS expression, parse directly
+   → Flag combinations (not standalone): eval(var) + any, spawn(var) + net, https + spawn
+   → NEVER flag standalone require('https') — too many false positives
+
+3. Maintainer Signal Scoring (npm Registry API)
+   → Account age, last publish date, provenance attestation delta
+   → npm uses Sigstore provenance (dist.signatures + _attestations fields)
+   → Flag: provenance ABSENT on new version when present on old (CRITICAL)
+   → Flag: 90+ days inactive then sudden push (HIGH)
+   → Flag: new maintainer added (HIGH)
+
+4. Gemini AI Reasoning (gemini-2.5-flash primary, gemini-2.5-pro for BLOCK confirmation)
+   → Synthesize all 3 signal outputs with structured JSON prompt
+   → Output: PASS / WARN / BLOCK + confidence + summary (2 sentences max) + attack_pattern
+   → Always Flash first; if Flash returns BLOCK ≥0.85, run parallel Pro confirmation
+   → Posted as GitHub PR comment + sets commit status check
+```
+
+### Gemini Prompt Template (first-class artifact — do not change without updating here)
+
+```
+You are a senior supply chain security researcher. Analyze the following npm package upgrade signals and output a verdict.
+
+Signals: {signals_json}
+
+Output ONLY valid JSON with this exact schema, no preamble:
+{
+  "verdict": "PASS" | "WARN" | "BLOCK",
+  "confidence": 0.0-1.0,
+  "summary": "max 2 sentences explaining the verdict",
+  "attack_pattern": "snake_case identifier or null"
+}
+
+Rules:
+- BLOCK: confidence >= 0.85 AND 2+ signals flagged
+- WARN: confidence >= 0.60 AND 1+ signal flagged
+- PASS: otherwise
+- Do not explain your reasoning outside the JSON object.
+
+Examples:
+[BLOCK example]: signals show new postinstall with outbound HTTPS + key change → {"verdict":"BLOCK","confidence":0.94,"summary":"New postinstall hook opens outbound connection combined with provenance attestation removal after 8 months inactivity. Pattern matches known supply chain hijack.","attack_pattern":"npm_account_hijack_rat_deployment"}
+[WARN example]: signals show only minor hook change, no network call → {"verdict":"WARN","confidence":0.65,"summary":"Postinstall hook modified but no network activity detected. Recommend manual review before merging.","attack_pattern":null}
+[PASS example]: no signals flagged → {"verdict":"PASS","confidence":0.97,"summary":"No suspicious behavior detected in this upgrade.","attack_pattern":null}
+```
+
+### Gemini Fail-Safe (when Gemini unreachable)
+
+```python
+flagged_count = sum([script_diff.flagged, ast_scan.flagged, maintainer.flagged])
+if flagged_count >= 3:   verdict, confidence = "BLOCK", 0.90
+elif flagged_count == 2: verdict, confidence = "WARN",  0.65
+elif flagged_count == 1: verdict, confidence = "WARN",  0.40
+else:                    verdict, confidence = "PASS",  0.95
+```
+
+### Maintainer Risk Score Formula
+
+```
+score = 0
++ provenance removed when previously present: +50
++ inactive_days > 180:                        +35
++ inactive_days 90-180:                       +25
++ new_maintainer_added:                       +20
+  (weight -10 if downloads > 1M AND package_age > 365 days)
++ package_age < 30 days AND weekly_downloads > 10000: +15
+cap at 100
+```
+
+### Confidence Thresholds
+
+- `BLOCK` only if confidence ≥ 0.85
+- `WARN` for 0.60–0.84
+- `PASS` below 0.60
+
+### Hard Override Rules (bypass Gemini verdict)
+
+```
+3+ signals flagged              → always BLOCK, confidence 0.90
+provenance removed + new net call → always BLOCK, confidence 0.95
+Gemini unreachable              → rule-based fallback (see above)
+API unreachable from action     → WARN, fail open (never silent block)
+```
+
+---
+
+## Repo Structure
+
+```
+preflight/
+├── preflight-action/              # GitHub Action (TypeScript)
+│   ├── src/
+│   │   ├── index.ts               # Entrypoint: inputs → API → PR comment
+│   │   ├── config/env.ts          # Zod-validated env vars
+│   │   ├── adapters/
+│   │   │   ├── analysis-api.ts    # POST /analyze client
+│   │   │   └── github.ts          # Post PR comment, set status check
+│   │   ├── services/lockfile.ts   # Parse package-lock.json diff
+│   │   └── errors/index.ts
+│   ├── action.yml
+│   └── package.json               # deps: @actions/core, @actions/github, zod, node-fetch
+│
+├── preflight-api/                 # FastAPI analysis service (Python)
+│   ├── app/
+│   │   ├── main.py                # App init, lifespan, /health
+│   │   ├── config/settings.py     # pydantic-settings (all env vars)
+│   │   ├── routers/
+│   │   │   ├── analyze.py         # POST /analyze
+│   │   │   ├── scans.py           # GET /scans, GET /scans/:id
+│   │   │   └── packages.py        # GET /packages/:name/threat, GET /packages/top-threats
+│   │   ├── services/
+│   │   │   ├── script_diff.py     # Signal 1 — tarball fetch + hook diff
+│   │   │   ├── ast_scanner.py     # Signal 2 — shell regex + acorn subprocess
+│   │   │   ├── maintainer.py      # Signal 3 — npm registry, provenance check
+│   │   │   └── gemini.py          # Signal 4 — Gemini API, structured JSON
+│   │   ├── db/
+│   │   │   ├── client.py          # MongoDB motor async client (lifespan managed)
+│   │   │   ├── scans.py           # Scans collection CRUD
+│   │   │   └── packages.py        # Packages collection upsert
+│   │   ├── schemas/analysis.py    # Pydantic models for all request/response shapes
+│   │   └── errors.py
+│   ├── requirements.txt
+│   └── render.yaml
+│
+├── preflight-web/                 # Next.js dashboard (frontend teammate's domain)
+│   ├── app/
+│   │   ├── page.tsx               # / landing
+│   │   ├── dashboard/page.tsx     # /dashboard live feed
+│   │   ├── demo/page.tsx          # /demo interactive ← most important for hackathon
+│   │   └── scans/[id]/page.tsx    # /scans/:id drill-down
+│   ├── components/                # 8 components (see Frontend Spec below)
+│   └── lib/api.ts                 # API client
+│
+├── demo/
+│   ├── verdaccio/config.yaml      # Local npm registry config
+│   └── mock-axios-malicious/      # Fake axios 1.7.10 with postinstall RAT stub
+│
+└── CLAUDE.md                      # This file
+```
+
+---
+
+## Complete API Contract — Single Source of Truth
+
+**All code must conform to this. Never deviate without updating this file.**
+
+**Base URL (production):** `https://preflight-api.onrender.com`
+
+### POST /analyze
+
+```json
+// Request
+{
+  "package_name": "axios",
+  "old_version": "1.7.9",      // null if new dependency
+  "new_version": "1.7.10",
+  "repo": "org/repo-name",     // optional
+  "pr_number": 42,             // optional
+  "demo": false                // true → return pre-seeded demo result, skip real analysis
+}
+
+// Response
+{
+  "scan_id": "64a7f3e2b1c4d5e6f7a8b9c0",  // MongoDB ObjectId as string
+  "verdict": "BLOCK",
+  "confidence": 0.94,
+  "duration_ms": 2840,
+  "signals": {
+    "script_diff": {
+      "flagged": true,
+      "new_hooks": ["postinstall"],
+      "changed_hooks": [],
+      "reason": "New postinstall hook added in 1.7.10"
+    },
+    "ast_scan": {
+      "flagged": true,
+      "patterns": ["outbound_https", "process_spawn"],
+      "severity": "high",
+      "reason": "Postinstall script opens outbound connection and spawns child process"
+    },
+    "maintainer": {
+      "flagged": true,
+      "risk_score": 92,
+      "key_changed": true,
+      "inactive_days": 238,
+      "reason": "Provenance attestation removed after 8 months of inactivity"
+    },
+    "llm_reasoning": {
+      "verdict": "BLOCK",
+      "confidence": 0.94,
+      "summary": "Pattern matches known supply chain attack: new postinstall hook with outbound network call combined with provenance removal after inactivity is high-confidence malicious.",
+      "attack_pattern": "npm_account_hijack_rat_deployment"
+    }
+  }
+}
+```
+
+### GET /health
+
+```json
+{
+  "status": "ok",
+  "checks": {
+    "mongodb": "connected",
+    "npm_registry": "reachable",
+    "gemini_api": "reachable"
+  },
+  "version": "1.0.0"
+}
+```
+
+### GET /scans?page=1&limit=20
+
+Returns paginated scans sorted by `scanned_at DESC`. Excludes `is_demo: true` scans.
+
+### GET /scans/:scan_id
+
+Full scan object. `scan_id` is MongoDB ObjectId as hex string. Used by PR comment links.
+
+### GET /packages/:name/threat
+
+```json
+{
+  "package_name": "axios",
+  "total_scans": 423,
+  "block_count": 1,
+  "warn_count": 3,
+  "pass_count": 419,
+  "community_threat_score": 72,
+  "last_flagged_at": "2026-05-08T14:23:00Z",
+  "flagged_versions": ["1.7.10"],
+  "safe_versions": ["1.7.9", "1.7.8"]
+}
+// If total_scans < 5:
+// { "package_name": "axios", "total_scans": 3, "score": null, "reason": "insufficient_data", "minimum_scans": 5 }
+```
+
+### GET /packages/top-threats?limit=10
+
+Top packages by community_threat_score. Minimum 5 scans to appear.
+
+---
+
+## MongoDB Data Models
+
+**Database:** `preflight_db`
+
+### Collection: scans
+
+```
+_id (ObjectId), package_name (string), old_version (string|null), new_version (string),
+verdict ("PASS"|"WARN"|"BLOCK"), confidence (float 0.0-1.0),
+repo (string|null), pr_number (int|null),
+is_demo (bool, default false),          ← exclude from community scores
+signals {
+  script_diff { flagged, new_hooks[], changed_hooks[], reason },
+  ast_scan    { flagged, patterns[], severity, reason },
+  maintainer  { flagged, risk_score, key_changed, inactive_days, reason },
+  llm_reasoning { verdict, confidence, summary, attack_pattern }
+},
+duration_ms (int), scanned_at (datetime, indexed DESC), created_at (datetime)
+
+Indexes:
+  scanned_at DESC              (feed queries)
+  package_name + new_version   (threat lookup)
+  verdict                      (filter by verdict)
+  package_name + verdict        (compound — "all BLOCKs for package X")
+  scanned_at TTL 30 days        (expireAfterSeconds: 2592000 — Atlas free tier limit)
+```
+
+### Collection: packages
+
+```
+_id (ObjectId), package_name (string, unique index),
+total_scans (int), block_count (int), warn_count (int), pass_count (int),
+community_threat_score (int 0-100, indexed DESC),
+last_flagged_at (datetime|null), flagged_versions[] (string array),
+safe_versions[] (string array, capped 20, newest first — $push with $slice: -20),
+updated_at (datetime)
+
+Community threat score formula:
+  score = (block_count * 100 + warn_count * 40) / total_scans
+  Capped at 100. Requires minimum 5 total_scans to be shown publicly.
+  Excludes scans where is_demo=true.
+```
+
+### ObjectId serialization
+
+Python motor returns ObjectId objects. Serialize as `str(_id)` in all JSON responses.
+Use `json_encoders = {ObjectId: str}` in Pydantic config or a custom serializer.
+
+---
+
+## GitHub Action — action.yml Requirements
+
+```yaml
+name: 'Preflight Supply Chain Scan'
+description: 'Behavioral pre-execution interceptor for npm packages'
+
+inputs:
+  lockfile:
+    description: 'Path to package-lock.json'
+    required: false
+    default: 'package-lock.json'
+  api_url:
+    description: 'Preflight API URL'
+    required: false
+    default: 'https://preflight-api.onrender.com'
+
+outputs:
+  verdict:
+    description: 'PASS, WARN, or BLOCK'
+  scan_id:
+    description: 'MongoDB scan ID for the full report'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
+
+# Required permissions (must be in the workflow file that uses this action):
+# permissions:
+#   pull-requests: write   # post PR comment
+#   statuses: write        # set commit status check
+#   contents: read         # read package-lock.json
+```
+
+### action.yml note on SHA pinning
+
+Every public YAML snippet (README, landing page) must show `@v1.0.0` (immutable tag),
+NOT `@v1` (mutable). Using a mutable tag on a supply chain security tool is a credibility hole.
+
+---
+
+## GitHub Action Output — PR Comment Format
+
+```markdown
+## 🔴 Preflight: BLOCK — Dependency Update Intercepted
+
+**`axios`** `1.7.9 → 1.7.10` · Confidence: **94%** · 2.84s
+
+> This matches the pattern of a supply chain hijack. New postinstall hook
+> with outbound network call combined with provenance removal after 8
+> months of inactivity is high-confidence malicious activity.
+
+| Signal      | Status     | Detail                                      |
+|-------------|------------|---------------------------------------------|
+| Script diff | 🚨 Flagged | New postinstall hook added                  |
+| AST scan    | 🚨 Flagged | Outbound HTTPS + process.spawn detected     |
+| Maintainer  | 🚨 Flagged | Provenance removed, 238 days inactive       |
+| Gemini AI   | 🚨 Flagged | npm account hijack + RAT deployment pattern |
+
+Attack pattern: npm_account_hijack_rat_deployment
+
+❌ Do NOT merge · 🔍 Review manually · 📢 Report to npm security
+
+[Preflight](https://preflight.dev) · [View full analysis →](https://preflight.dev/scans/64a7...)
+```
+
+Verdict headers: 🔴 BLOCK | 🟡 WARN | 🟢 PASS
+
+---
+
+## Frontend Spec
+
+### Aesthetic: Neo-Brutalist Terminal
+
+Security tool for developers. High contrast. Hard corners. No soft shadows. No gradients. War room aesthetic.
+
+### Design Tokens
+
+```css
+--bg-primary:     #0A0A0A
+--bg-surface:     #111111
+--bg-elevated:    #1A1A1A
+--border:         #2A2A2A
+--border-strong:  #404040
+--text-primary:   #F0F0F0
+--text-secondary: #888888
+--text-muted:     #555555
+--accent-pass:    #00FF88
+--accent-warn:    #FFB800
+--accent-block:   #FF3B30
+--accent-blue:    #4A9EFF
+--font-mono:    'JetBrains Mono', monospace
+--font-sans:    'Inter', sans-serif
+--font-display: 'Space Grotesk', sans-serif
+```
+
+### Pages (4 total)
+
+**/ Landing**
+- Hero: "The axios attack lasted 3 hours." / "70M weekly downloads. Zero tools caught it." / "Preflight would have blocked it in 30 seconds."
+- CTA: "See it live" → /demo
+- Install snippet with copy button (`uses: preflight-ai/preflight@v1.0.0`)
+- Live community stats (3 counters, polling GET /scans every 10s)
+- 4-signal grid
+
+**/dashboard**
+- 70% live scan feed / 30% sidebar
+- ScanCard: collapsed 72px, click to expand → signal pills + confidence bar
+- New cards slide in at top in real time
+- Sidebar: Top Threats, Today's Stats, Try demo link
+
+**/demo ← Most important for hackathon**
+- Pre-filled locked form: axios 1.7.9 → 1.7.10 + label "The exact attack from March 31, 2026"
+- "Run Preflight analysis" button → calls POST /analyze with `demo: true`
+- 4 SignalRows animate in sequentially (150ms stagger): pending → analyzing → flagged/clear
+- Verdict card drops: BLOCK, 94%, Gemini summary, attack_pattern
+- PR comment preview below
+- No GitHub account required
+
+**/scans/:id**
+- Full drill-down. PR comments link here. Shareable.
+- Verdict header + Gemini summary + confidence bar
+- 4 expandable signal cards with full detail including actual script code block
+
+### Component Library
+
+| Component | Key Props | Notes |
+|---|---|---|
+| VerdictBadge | verdict: "PASS"\|"WARN"\|"BLOCK" | Monospace, all-caps, 1px border, bg tint |
+| ScanCard | scan object | 72px collapsed, click to expand |
+| SignalPill | name, flagged: bool | Green dot (clear) / red dot (flagged) |
+| ConfidenceBar | confidence: 0-1 | 4px height, color by threshold |
+| InstallSnippet | code, language | Dark block, copy button |
+| StatCounter | value, label | Large mono number, count-up animation |
+| SignalRow | name, status, reason | pending→analyzing→flagged/clear states |
+| LivePulse | — | CSS only, green pulse dot, 2s loop |
+
+---
+
+## Tech Stack — Final Locked
+
+| Layer | Technology | Sponsor |
+|---|---|---|
+| Action runtime | GitHub Actions (TypeScript) | GitHub |
+| Analysis API | Python FastAPI | — |
+| API hosting | Render | Render |
+| LLM reasoning | **Gemini 2.5 Flash** (primary) + **Pro** (BLOCK confirm) | Google Cloud + Gemini |
+| Database | MongoDB Atlas | MongoDB |
+| Frontend | Next.js (App Router) | — |
+| Frontend hosting | Vercel (free) | — |
+| AST parsing | acorn (via Node.js subprocess from Python) | — |
+| npm data | npm Registry REST API | — |
+| GitHub data | GitHub REST API + Actions toolkit | GitHub |
+| Demo registry | Verdaccio (local) | — |
+
+**CRITICAL NOTE on acorn**: `acorn-py` does NOT exist on PyPI. Use a Node.js subprocess:
+```python
+import subprocess, json
+result = subprocess.run(
+    ["node", "-e", f"const acorn=require('acorn');console.log(JSON.stringify(acorn.parse({json.dumps(js_code)},{{ecmaVersion:2022,sourceType:'module'}})))"],
+    capture_output=True, text=True, timeout=30
+)
+```
+Or ship `acorn` in `preflight-api/` as a local Node module and call it via subprocess.
+
+---
+
+## Environment Variables
+
+### preflight-action (TypeScript)
+
+```
+PREFLIGHT_API_URL=https://preflight-api.onrender.com
+GITHUB_TOKEN=                              # auto-injected by GitHub Actions
+```
+
+### preflight-api (Python)
+
+```
+GEMINI_API_KEY=                            # Google AI Studio key
+MONGODB_URI=mongodb+srv://...              # Atlas connection string
+MONGODB_DB_NAME=preflight_db
+NPM_REGISTRY_URL=https://registry.npmjs.org
+ANALYSIS_TIMEOUT_MS=45000
+LOG_LEVEL=INFO
+HOST=0.0.0.0
+PORT=8000
+```
+
+### preflight-web (Next.js)
+
+```
+NEXT_PUBLIC_API_URL=https://preflight-api.onrender.com
+NEXT_PUBLIC_POLL_INTERVAL_MS=10000
+```
+
+---
+
+## Build Tooling Requirements (must exist before any code runs)
+
+### preflight-action
+
+Required `package.json` dependencies:
+```json
+{
+  "dependencies": {
+    "@actions/core": "^1.10.0",
+    "@actions/github": "^6.0.0",
+    "zod": "^3.22.0",
+    "node-fetch": "^3.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "@vercel/ncc": "^0.38.0"
+  },
+  "scripts": {
+    "build": "tsc && ncc build dist/index.js -o dist --license licenses.txt",
+    "package": "npm run build"
+  }
+}
+```
+
+Required `tsconfig.json` (at `preflight-action/tsconfig.json`):
+```json
+{ "compilerOptions": { "target": "ES2022", "module": "commonjs", "outDir": "dist", "strict": true } }
+```
+
+### preflight-api
+
+Corrected `requirements.txt` (remove `acorn-py`, add `uvicorn`, version pin everything):
+```
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+pydantic==2.7.0
+pydantic-settings==2.3.0
+motor==3.4.0
+google-generativeai==0.8.0
+requests==2.32.0
+httpx==0.27.0
+python-multipart==0.0.9
+```
+
+### preflight-web
+
+Required `next.config.js` (standard App Router config, nothing custom needed).
+
+---
+
+## Critical Rules — Never Break These
+
+1. **Stateless per-request** — no state stored between requests; MongoDB writes are OK
+2. **Timeout everything** — npm registry calls: 10s, AST scan: 30s, Gemini API: 45s
+3. **Never run postinstall hooks** — analyze scripts, never execute them
+4. **Fail open, not closed** — if API unreachable, action warns but does not hard-block
+5. **Confidence thresholds** — BLOCK ≥0.85; WARN 0.60–0.84; PASS below
+6. **One verdict per package** — no transitive deps (scope creep)
+7. **Sequential multi-package processing** — not parallel; 1s delay between calls; cap at 3 per PR
+8. **Demo mode isolation** — `is_demo: true` scans excluded from all community score calculations
+9. **CORS required** — FastAPI must allow the Vercel frontend origin
+10. **ObjectId serialization** — always serialize MongoDB `_id` as `str()` in JSON responses
+11. **Input validation** — package_name must match npm name regex `^(@[a-z0-9-~][a-z0-9-._~]*/)?[a-z0-9-~][a-z0-9-._~]*$`
+
+---
+
+## Demo Mode Implementation
+
+The demo on `preflight.dev` must be resilient regardless of Verdaccio, Render cold start, or Gemini rate limits.
+
+**Strategy**: Pre-seed a fixed demo scan in MongoDB at startup. When `POST /analyze` receives `demo: true` (or the package is `axios` + versions `1.7.9 → 1.7.10` + `demo=true`), return the seeded result with artificial per-signal delays (500ms, 700ms, 600ms, 900ms) to make the UI animation feel real. Gemini is NOT called during demo mode.
+
+**Demo seed document**: Fixed scan_id, BLOCK verdict, confidence 0.94, all 4 signals flagged, attack_pattern `npm_account_hijack_rat_deployment`. Seeded via a `seed_demo_data()` call in the FastAPI lifespan startup.
+
+**Render cold start fix**: Add a keep-alive cron job (cron-job.org or Render cron) pinging `GET /health` every 14 minutes.
+
+**Gemini rate limits**: Gemini 2.5 Flash: 15 RPM free. Use Flash for all real scans. Use separate API keys for dev/staging/prod. Pro only for BLOCK confirmation (parallel call).
+
+---
+
+## Demo Scenario — The Axios Attack
+
+```
+Package:      axios
+Old version:  1.7.9  (clean)
+New version:  1.7.10 (malicious — served from Verdaccio mock OR demo mode)
+
+Expected signals:
+  script_diff.flagged   = true  (new postinstall hook)
+  ast_scan.flagged      = true  (outbound http call in postinstall)
+  maintainer.flagged    = true  (provenance attestation removed)
+  llm_reasoning.flagged = true  (BLOCK)
+
+Expected verdict: BLOCK, confidence >= 0.90, attack_pattern: npm_account_hijack_rat_deployment
+
+Demo flow:
+  1. Open /demo page on preflight.dev
+  2. Click "Run Preflight analysis" (axios 1.7.9 → 1.7.10 pre-filled)
+  3. 4 SignalRows animate in sequentially with staggered timing
+  4. Verdict card drops: BLOCK 94%
+  5. PR comment preview shown below
+  6. [Optional] Show real GitHub PR with the action comment
+```
+
+---
+
+## Known Implementation Risks (resolve before demo)
+
+### CRITICAL — will break demo
+
+| # | Risk | Resolution |
+|---|---|---|
+| C1 | `acorn-py` doesn't exist on PyPI | Use Node.js subprocess (see Tech Stack section) |
+| C2 | `preflight-action/package.json` has empty deps | Add all deps listed in Build Tooling section |
+| C3 | No tsconfig.json | Create at `preflight-action/tsconfig.json` |
+| C4 | action.yml missing inputs/outputs/permissions | See action.yml requirements section above |
+| C5 | No demo pre-seeded data | Implement seed_demo_data() in lifespan startup |
+| C6 | Render cold start on first demo | Set up keep-alive cron before first presentation |
+| C7 | No CORS on FastAPI | Add `CORSMiddleware` allowing Vercel domain |
+| C8 | MongoDB ObjectId not JSON serializable | Use `str(_id)` in all Pydantic response models |
+
+### HIGH — correctness bugs
+
+| # | Risk | Resolution |
+|---|---|---|
+| H1 | npm API has no signing_key_fingerprint field | Use Sigstore provenance: check dist.signatures + _attestations; flag if absent on new version but present on old |
+| H2 | acorn fails on shell scripts | Run shell regex scanner first; only call acorn if hook is `node <file>` or inline JS |
+| H3 | require('https') standalone causes false positives | Flag only combinations: `require('https')` + `process.spawn` in same script |
+| H4 | acorn must follow file paths into tarball | If hook is `node ./scripts/setup.js`, extract that file from tarball, then parse |
+| H5 | Gemini prompt not written | See Gemini Prompt Template section above — use exactly as specified |
+| H6 | Gemini fail-safe logic not written | See Gemini Fail-Safe section above |
+| H7 | Demo runs pollute community scores | Add `is_demo: bool` to scans; exclude from score calculations |
+| H8 | Multi-package PRs hit Gemini rate limits | Process sequentially, 1s delay, cap at 3 per PR run |
+
+### MEDIUM — edge cases
+
+| # | Risk | Resolution |
+|---|---|---|
+| M1 | new_package (old_version=null) crashes Signal 1 | Skip diff; any hook on new dep = HIGH flag |
+| M2 | GET /packages/:name/threat with <5 scans | Return `{score: null, reason: "insufficient_data"}` not 404 |
+| M3 | No rate limiting on POST /analyze | Add simple IP-based rate limiting (10 req/min/IP) using a middleware |
+| M4 | package_name path traversal in tarball extraction | Validate against npm name regex before any file I/O |
+| M5 | safe_versions[] cap eviction not defined | `$push` with `$slice: -20` (keep last 20 newest) |
+| M6 | SHA pinning contradiction in docs | Use `@v1.0.0` in all public YAML snippets, never `@v1` |
+| M7 | Gemini Pro for BLOCK is slowest path | Flash first; if BLOCK ≥0.85, parallel Pro confirm; never block comment on Pro alone |
+| M8 | No .github/workflows/ example in repo | Add `demo/.github/workflows/preflight.yml` as a copyable example |
+
+### Pitch risks
+
+| # | Risk | Resolution |
+|---|---|---|
+| P1 | "npm audit/Snyk missed it" needs a source | Rephrase: "CVE-based tools require a CVE; the axios attack had none because the account was legitimately compromised" |
+| P2 | Socket.dev does similar behavioral analysis | Differentiators: open-source MIT, zero signup, one-line YAML, no org permissions, free forever |
+| P3 | "Gets smarter" implies ML | Use: "aggregates community threat signal — every scan contributes to a shared intelligence layer" |
+
+---
+
+## 48-Hour Build Order (updated with gap fixes)
+
+### Pre-code (1 hour, do first)
+1. Write Gemini prompt in `preflight-api/app/services/gemini_prompt.txt` (see template above)
+2. Define shell regex patterns in `preflight-api/app/services/shell_patterns.py`
+3. Create MongoDB demo seed document (exact values for axios BLOCK scenario)
+4. Verify Gemini API key works with a direct `curl` test
+
+### Hours 0–8 | Foundation
+- `npm install` with correct deps in preflight-action
+- `tsconfig.json` + build script working (`npm run build` outputs `dist/index.js`)
+- FastAPI: `/health` returns all 3 checks (MongoDB, npm registry, Gemini)
+- MongoDB Atlas: connection verified, indexes created
+- CORS middleware added to FastAPI
+- `seed_demo_data()` in FastAPI lifespan — demo scan pre-seeded at startup
+- Verdaccio running locally with mock axios 1.7.10 published
+
+### Hours 8–20 | Core Engine
+- Signal 1: fetch tarballs, extract hooks, diff — handles null old_version
+- Signal 2: shell regex scanner + acorn subprocess path + tarball file extraction
+- Signal 3: npm registry, provenance check (dist.signatures), risk_score formula
+- POST /analyze: wires all 3 signals + demo_mode bypass
+- MongoDB write on every scan (scans + packages upsert)
+- ObjectId serialization tested end-to-end
+
+### Hours 20–32 | Gemini + Integration
+- Signal 4: Gemini Flash with structured prompt + fail-safe fallback
+- Gemini Pro parallel confirmation for BLOCK verdicts
+- GitHub Action: parse package-lock.json diff, call API, post PR comment
+- action.yml: complete with inputs, outputs, permissions block
+- `dist/index.js` built and committed (actions need pre-built dist)
+- Keep-alive cron set up on Render
+
+### Hours 32–42 | Demo + Polish
+- End-to-end demo: real PR → action triggers → BLOCK verdict → PR comment
+- Deploy FastAPI to Render, verify /health
+- Deploy Next.js to Vercel
+- /demo page fully animated with sequential signal rows
+- /scans/:id complete
+- Landing page complete with live stat counters
+
+### Hours 42–48 | Buffer + Presentation
+- Freeze code
+- Run demo 10 times without failure
+- Practice 3-minute pitch
+- README complete (judges will look at the repo)
+
+---
+
+## Design Philosophy
+
+> "Existing tools scan for known bad packages. Preflight reasons about *unknown* bad packages — the ones that slipped through because nobody had seen them yet."
+
+Every system design choice reinforces this: the 4-signal funnel exists because no single signal is sufficient. Behavioral analysis + identity signals + AI synthesis = confidence that individual heuristics can't achieve.
