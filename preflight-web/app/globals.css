@@ -167,10 +167,10 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   text-transform: uppercase; letter-spacing: 0.08em;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
-  transition: color var(--duration-fast);
+  transition: all var(--duration-fast) var(--ease-out);
   text-decoration: none;
 }
-.nav-link:hover { color: var(--text-primary); text-decoration: none; }
+.nav-link:hover { color: var(--text-primary); text-decoration: none; background: rgba(255,255,255,0.03); }
 .nav-link .nav-num { color: var(--text-muted); font-size: 10px; }
 .nav-link.active {
   color: var(--text-primary);
@@ -352,7 +352,7 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   position: relative;
   text-decoration: none;
 }
-.btn:hover { background: var(--bg-elevated); border-color: var(--text-secondary); text-decoration: none; }
+.btn:hover { background: var(--bg-elevated); border-color: var(--text-secondary); text-decoration: none; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
 .btn:active { transform: translateY(1px); }
 .btn.primary {
   background: var(--accent-pass); color: var(--bg-primary);
@@ -396,7 +396,17 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   padding: var(--space-16) var(--space-8);
   border-bottom: 1px solid var(--border);
   position: relative;
+  animation: fade-up 0.6s var(--ease-out) backwards;
 }
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.section:nth-child(1) { animation-delay: 0ms; }
+.section:nth-child(2) { animation-delay: 100ms; }
+.section:nth-child(3) { animation-delay: 200ms; }
+.section:nth-child(4) { animation-delay: 300ms; }
+
 .section.tight { padding: var(--space-12) var(--space-8); }
 .container { max-width: 1400px; margin: 0 auto; }
 .container.narrow { max-width: 920px; }
@@ -892,11 +902,12 @@ h4 { font-size: 14px; font-weight: 600; }
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   overflow: hidden;
-  transition: background var(--duration-fast) var(--ease-out);
+  transition: all var(--duration-fast) var(--ease-out);
   position: relative;
+  will-change: transform, background-color;
 }
 .scan-card:last-child { border-bottom: none; }
-.scan-card:hover { background: var(--bg-elevated); }
+.scan-card:hover { background: var(--bg-elevated); transform: translateY(-2px); box-shadow: 0 4px 20px rgba(0,0,0,0.3); z-index: 10; border-color: transparent; }
 .scan-card.expanded { background: var(--bg-elevated); }
 .scan-card::before {
   content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
@@ -1602,7 +1613,8 @@ h4 { font-size: 14px; font-weight: 600; }
   background-size: 48px 48px;
   /* Grid lines drift softly with the mouse — updated via rAF lerp in GridGlow.tsx */
   background-position: var(--bx, 0px) var(--by, 0px);
-  opacity: 0.4;
+  opacity: var(--grid-opacity, 0.4);
+  transition: opacity 0.3s ease;
   /* Radial gradient mask tracking mouse position (snaps instantly) */
   -webkit-mask-image: radial-gradient(
     700px circle at var(--gx, 50vw) var(--gy, 50vh),

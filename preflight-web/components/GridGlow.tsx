@@ -39,17 +39,21 @@ export function GridGlow() {
       el.style.setProperty("--gx", `${mouseX}px`);
       el.style.setProperty("--gy", `${mouseY}px`);
 
-      // Context-aware glow color
+      // Context-aware glow color and grid opacity
       const target = (e.target as Element).closest?.("[data-glow-target]");
       const ctx = target?.getAttribute("data-glow-target");
       if (ctx === "block") {
-        el.style.setProperty("--glow-color", "var(--accent-block)");
+        el.style.setProperty("--glow-color", "rgba(239, 68, 68, 0.4)"); // var(--accent-block) brighter
+        el.style.setProperty("--grid-opacity", "0.7");
       } else if (ctx === "pass") {
-        el.style.setProperty("--glow-color", "var(--accent-pass)");
+        el.style.setProperty("--glow-color", "rgba(34, 197, 94, 0.4)"); // var(--accent-pass) brighter
+        el.style.setProperty("--grid-opacity", "0.7");
       } else if (ctx === "warn") {
-        el.style.setProperty("--glow-color", "var(--accent-warn)");
+        el.style.setProperty("--glow-color", "rgba(234, 179, 8, 0.4)"); // var(--accent-warn) brighter
+        el.style.setProperty("--grid-opacity", "0.7");
       } else {
-        el.style.setProperty("--glow-color", "rgba(120,180,255,0.12)");
+        el.style.setProperty("--glow-color", "rgba(120,180,255,0.15)");
+        el.style.setProperty("--grid-opacity", "0.4");
       }
     };
 
@@ -87,7 +91,8 @@ export function GridGlow() {
         ["--gy" as any]: "50vh",
         ["--bx" as any]: "0px",
         ["--by" as any]: "0px",
-        ["--glow-color" as any]: "rgba(120,180,255,0.08)",
+        ["--glow-color" as any]: "rgba(120,180,255,0.15)",
+        ["--grid-opacity" as any]: "0.4",
       }}
     />
   );

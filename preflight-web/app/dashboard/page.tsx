@@ -11,7 +11,8 @@ function LiveHistogram({ feed }: { feed: any[] }) {
   // Build 36 time buckets from feed, padded with baseline
   const blocks = Array.from({ length: 36 }, (_, i) => {
     const scan = feed[i];
-    if (!scan) return { type: '', h: 20 + Math.random() * 25 };
+    // Use a deterministic pseudo-random value (based on index) to avoid hydration mismatch
+    if (!scan) return { type: '', h: 20 + Math.abs(Math.sin(i * 12.5)) * 25 };
     const v = scan.verdict?.toLowerCase();
     return { type: v === 'block' ? 'block' : v === 'warn' ? 'warn' : '', h: 30 + (scan.confidence ?? 0.5) * 55 };
   });

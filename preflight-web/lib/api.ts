@@ -178,16 +178,39 @@ export async function getScans(page = 1, limit = 20): Promise<ScansListResponse>
 }
 
 export async function getScan(scanId: string): Promise<ScanDetail> {
-  const res = await fetch(`${API_URL}/scans/${scanId}`);
-  if (res.status === 404) throw new Error('Scan not found');
-  if (!res.ok) throw new Error(`Failed to fetch scan: ${res.status}`);
-  return res.json();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  
+  try {
+    const res = await fetch(`${API_URL}/scans/${scanId}`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (res.status === 404) throw new Error('Scan not found');
+    if (!res.ok) throw new Error(`Failed to fetch scan: ${res.status}`);
+    return res.json();
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
 }
 
 export async function getTopThreats(limit = 10): Promise<PackageThreatResponse[]> {
-  const res = await fetch(`${API_URL}/packages/top-threats?limit=${limit}`);
-  if (!res.ok) throw new Error(`Failed to fetch threats: ${res.status}`);
-  return res.json();
+  // Use a 5s timeout so if the backend hangs, we quickly fall back to local mock data
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  
+  try {
+    const res = await fetch(`${API_URL}/packages/top-threats?limit=${limit}`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error(`Failed to fetch threats: ${res.status}`);
+    return res.json();
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
 }
 
 export async function getHealth(): Promise<HealthResponse> {
