@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Signal 4: Gemini AI synthesis — Flash primary, Pro confirmation for BLOCK."""
 
 import asyncio

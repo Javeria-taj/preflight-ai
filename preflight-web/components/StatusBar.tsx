@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
+import { getScanStats } from "../lib/api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://preflight-api.onrender.com";
 
@@ -9,22 +10,28 @@ export function StatusBar() {
   const [apiUp, setApiUp] = useState<boolean | null>(null);
   const startRef = useRef(Date.now());
 
-  // Pseudo-random rate/latency flicker — gives the terminal feel
+  // Real scan rate from backend
   useEffect(() => {
-    const t = setInterval(() => {
-      setScanRate(120 + Math.floor(Math.random() * 30));
-      setLatency(260 + Math.floor(Math.random() * 80));
-    }, 2400);
+    const fetchStats = () => {
+      getScanStats().then(stats => setScanRate(stats.scan_rate_per_min)).catch(() => {});
+    };
+    fetchStats();
+    const t = setInterval(fetchStats, 10000); // refresh every 10s
     return () => clearInterval(t);
   }, []);
 
-  // Real health ping — determines uptime display and model name
+  // Real health ping + latency measurement
   useEffect(() => {
-    const ping = () =>
+    const ping = () => {
+      const start = Date.now();
       fetch(`${API_URL}/health`)
         .then(r => r.ok ? r.json() : Promise.reject())
-        .then(d => setApiUp(d.status === 'ok'))
+        .then(d => {
+          setApiUp(d.status === 'ok');
+          setLatency(Date.now() - start); // actual network latency
+        })
         .catch(() => setApiUp(false));
+    };
     ping();
     const t = setInterval(ping, 30000);
     return () => clearInterval(t);

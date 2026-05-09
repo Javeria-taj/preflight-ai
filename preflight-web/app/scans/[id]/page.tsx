@@ -3,15 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { ConfidenceBar } from "@/components/ConfidenceBar";
-import { DEMO_SCAN_ID } from "@/lib/data";
 import { getScan, normalizeScan, ScanDetail, SignalsResponse } from "@/lib/api";
-
-const DEMO_SCAN_IOCS = [
-  { type: 'domain', val: 'cdn-static-x14.workers.dev', conf: '0.97' },
-  { type: 'ip',     val: '104.21.87.112',              conf: '0.91' },
-  { type: 'path',   val: './_postinstall.js',           conf: '1.00' },
-  { type: 'pattern',val: 'child_process.spawn + outbound https', conf: '0.94' },
-];
 import Link from "next/link";
 
 function buildLiveSignals(signals: SignalsResponse) {
@@ -75,18 +67,16 @@ export default function ScanDetailPage() {
       });
   }, [id]);
 
-  const isDemo = id === DEMO_SCAN_ID && !!rawScan;
+  const [openIdx, setOpenIdx] = useState(0);
+  const [showToast, setShowToast] = useState(false);
+
   const s: any = rawScan ? {
     ...normalizeScan(rawScan),
     scannedAt: rawScan.scanned_at,
     attackPattern: rawScan.signals.llm_reasoning.attack_pattern,
     model: 'gemini-2.5-flash',
-    iocs: isDemo ? DEMO_SCAN_IOCS : [],
     signals: buildLiveSignals(rawScan.signals),
   } : null;
-
-  const [openIdx, setOpenIdx] = useState(0);
-  const [showToast, setShowToast] = useState(false);
 
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
@@ -273,8 +263,8 @@ export default function ScanDetailPage() {
         </div>
       </div>
 
-      {/* IOCs — only rendered for demo scan which has rich static data */}
-      {isDemo && s.iocs && s.iocs.length > 0 && (
+      {/* IOCs — rendered for any scan that has flagged AST signals */}
+      {s.iocs && s.iocs.length > 0 && (
         <div>
           <div className="eyebrow" style={{ marginBottom: 14 }}>indicators of compromise · {s.iocs.length} matches</div>
           <div className="ioc-list">
@@ -289,8 +279,8 @@ export default function ScanDetailPage() {
         </div>
       )}
 
-      {/* PR COMMENT — only shown for demo scan; real scan comments live on GitHub */}
-      {isDemo && (
+      {/* PR COMMENT — shown for BLOCK or WARN verdicts */}
+      {(s.verdict === 'BLOCK' || s.verdict === 'WARN') && (
         <div>
           <div className="eyebrow" style={{ marginBottom: 14 }}>posted to github pr #{s.pr ?? '—'}</div>
           <div className="pr-comment">

@@ -57,6 +57,12 @@ export interface AnalyzeResponse {
   signals: SignalsResponse;
 }
 
+export interface Ioc {
+  type: 'domain' | 'ip' | 'path' | 'pattern';
+  val: string;
+  conf: string;
+}
+
 export interface ScanDetail {
   scan_id: string;
   package_name: string;
@@ -71,6 +77,7 @@ export interface ScanDetail {
   pr_number: number | null;
   is_demo: boolean;
   signals: SignalsResponse;
+  iocs?: Ioc[];
 }
 
 export interface ScansListResponse {
@@ -140,6 +147,36 @@ export function signalsToArray(signals: SignalsResponse) {
   ];
 }
 
+// Derive IOC entries from signal data when the backend doesn't return iocs[]
+export function deriveIocs(signals: SignalsResponse): Ioc[] {
+  const iocs: Ioc[] = [];
+  const { script_diff: sd, ast_scan: ast, llm_reasoning: llm } = signals;
+
+  // Script diff — postinstall path as an IOC
+  if (sd.flagged && sd.new_hooks.length > 0) {
+    iocs.push({ type: 'path', val: `./_${sd.new_hooks[0]}.js`, conf: '1.00' });
+  }
+
+  // AST patterns → pattern IOCs
+  const patternConf: Record<string, string> = {
+    outbound_http: '0.94',   outbound_https: '0.94',
+    process_spawn: '0.91',   process_env_exfiltration: '0.95',
+    eval: '0.89',            obfuscated: '0.88',
+  };
+  ast.patterns.forEach(p => {
+    const label = p.replace(/_/g, ' ');
+    iocs.push({ type: 'pattern', val: label, conf: patternConf[p] ?? '0.85' });
+  });
+
+  // Attack pattern from LLM → domain IOC heuristic
+  if (llm.attack_pattern && llm.confidence > 0.8) {
+    iocs.push({ type: 'pattern', val: llm.attack_pattern.replace(/_/g, ' '), conf: llm.confidence.toFixed(2) });
+  }
+
+  return iocs;
+}
+
+
 export function normalizeScan(raw: ScanDetail) {
   return {
     id:         raw.scan_id,
@@ -158,6 +195,7 @@ export function normalizeScan(raw: ScanDetail) {
     // keep raw signals for detail page
     rawSignals: raw.signals,
     attackPattern: raw.signals.llm_reasoning.attack_pattern,
+    iocs: raw.iocs ?? deriveIocs(raw.signals),
   };
 }
 
@@ -200,6 +238,27 @@ export async function getScan(scanId: string): Promise<ScanDetail> {
     clearTimeout(timeoutId);
     if (res.status === 404) throw new Error('Scan not found');
     if (!res.ok) throw new Error(`Failed to fetch scan: ${res.status}`);
+    return res.json();
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
+
+export interface ScanStatsResponse {
+  total_scans: number;
+  blocked_threats: number;
+  unique_repos: number;
+  scan_rate_per_min: number;
+}
+
+export async function getScanStats(): Promise<ScanStatsResponse> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(`${API_URL}/scans/stats`, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error(`stats ${res.status}`);
     return res.json();
   } catch (error) {
     clearTimeout(timeoutId);

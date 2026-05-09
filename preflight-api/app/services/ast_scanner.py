@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Signal 2: shell regex scanner + acorn AST analysis for install hooks."""
 
 import io

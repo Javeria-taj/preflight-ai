@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Signal 3: npm maintainer scoring — provenance attestation, inactivity, key rotation."""
 
 from dataclasses import dataclass

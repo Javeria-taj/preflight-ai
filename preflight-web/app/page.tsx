@@ -6,7 +6,7 @@ import { StatCounter } from "@/components/StatCounter";
 import { Footer } from "@/components/Footer";
 import { Magnetic } from "@/components/Magnetic";
 import { HOW_STEPS, SIGNAL_INFO, INSTALL_YAML } from "@/lib/data";
-import { getScans } from "@/lib/api";
+import { getScanStats } from "@/lib/api";
 import Link from "next/link";
 
 export default function LandingPage() {
@@ -23,16 +23,10 @@ export default function LandingPage() {
   }, []);
 
   useEffect(() => {
-    getScans(1, 100).then(data => {
-      if (data.scans && data.scans.length > 0) {
-        const blocks = data.scans.filter((s: { verdict: string }) => s.verdict === 'BLOCK').length;
-        const repos = new Set(
-          data.scans.map((s: { repo: string | null }) => s.repo).filter(Boolean)
-        ).size;
-        setScanCount(data.scans.length);
-        setBlockCount(blocks);
-        setRepoCount(repos);
-      }
+    getScanStats().then(stats => {
+      setScanCount(stats.total_scans);
+      setBlockCount(stats.blocked_threats);
+      setRepoCount(stats.unique_repos);
     }).catch(() => {});
     const t = setInterval(() => setScanCount(c => c + 1), 15000);
     return () => clearInterval(t);

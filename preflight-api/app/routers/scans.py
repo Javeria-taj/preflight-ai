@@ -11,6 +11,11 @@ async def list_scans(page: int = Query(1, ge=1), limit: int = Query(20, ge=1, le
     return {"scans": docs, "page": page, "limit": limit}
 
 
+@router.get("/scans/stats")
+async def get_stats():
+    return await scans_db.get_scan_stats()
+
+
 @router.get("/scans/{scan_id}")
 async def get_scan(scan_id: str):
     doc = await scans_db.get_scan(scan_id)

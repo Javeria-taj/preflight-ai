@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Signal 1: fetch tarballs, extract install hooks, diff between versions."""
 
 import asyncio
