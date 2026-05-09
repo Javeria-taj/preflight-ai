@@ -3,8 +3,15 @@ import React, { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { ConfidenceBar } from "@/components/ConfidenceBar";
-import { SCAN_DETAIL_AXIOS, DEMO_SCAN_ID } from "@/lib/data";
+import { DEMO_SCAN_ID } from "@/lib/data";
 import { getScan, normalizeScan, ScanDetail, SignalsResponse } from "@/lib/api";
+
+const DEMO_SCAN_IOCS = [
+  { type: 'domain', val: 'cdn-static-x14.workers.dev', conf: '0.97' },
+  { type: 'ip',     val: '104.21.87.112',              conf: '0.91' },
+  { type: 'path',   val: './_postinstall.js',           conf: '1.00' },
+  { type: 'pattern',val: 'child_process.spawn + outbound https', conf: '0.94' },
+];
 import Link from "next/link";
 
 function buildLiveSignals(signals: SignalsResponse) {
@@ -58,8 +65,7 @@ export default function ScanDetailPage() {
   const [error, setError] = useState<'not_found' | 'timeout' | null>(null);
 
   useEffect(() => {
-    // For the demo scan ID, skip API call — use static data which includes iocs + kill-chain
-    if (!id || id === DEMO_SCAN_ID) { setLoading(false); return; }
+    if (!id) { setError('not_found'); setLoading(false); return; }
     getScan(id)
       .then(data => { setRawScan(data); setLoading(false); })
       .catch((err: Error) => {
@@ -69,16 +75,15 @@ export default function ScanDetailPage() {
       });
   }, [id]);
 
-  // Use static data for demo scan, or normalize live data for real scans
-  const isDemo = !id || id === DEMO_SCAN_ID || !rawScan;
-  const s: any = isDemo ? SCAN_DETAIL_AXIOS : {
-    ...normalizeScan(rawScan!),
-    scannedAt: rawScan!.scanned_at,
-    attackPattern: rawScan!.signals.llm_reasoning.attack_pattern,
-    model: 'gemini-2.5-pro',
-    iocs: [],
-    signals: buildLiveSignals(rawScan!.signals),
-  };
+  const isDemo = id === DEMO_SCAN_ID && !!rawScan;
+  const s: any = rawScan ? {
+    ...normalizeScan(rawScan),
+    scannedAt: rawScan.scanned_at,
+    attackPattern: rawScan.signals.llm_reasoning.attack_pattern,
+    model: 'gemini-2.5-flash',
+    iocs: isDemo ? DEMO_SCAN_IOCS : [],
+    signals: buildLiveSignals(rawScan.signals),
+  } : null;
 
   const [openIdx, setOpenIdx] = useState(0);
   const [showToast, setShowToast] = useState(false);

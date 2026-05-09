@@ -2,9 +2,17 @@
 import React, { useState, useEffect, useRef } from "react";
 import { LivePulse } from "@/components/LivePulse";
 import { ScanCard } from "@/components/ScanCard";
-import { SCAN_FEED, TOP_THREATS } from "@/lib/data";
 import { getScans, getTopThreats, normalizeScan, PackageThreatResponse } from "@/lib/api";
 import Link from "next/link";
+
+// ── P50 latency computed from actual feed durations ──────────────────────
+function computeP50(feed: any[]): string {
+  const durations = feed.map(s => s.duration ?? s.duration_ms).filter((d): d is number => typeof d === 'number' && d > 0);
+  if (!durations.length) return '—';
+  const sorted = [...durations].sort((a, b) => a - b);
+  const p50 = sorted[Math.floor(sorted.length / 2)];
+  return `${(p50 / 1000).toFixed(1)}s`;
+}
 
 // ── Live histogram computed from actual feed data ─────────────────────────
 function LiveHistogram({ feed }: { feed: any[] }) {
@@ -73,15 +81,12 @@ export default function DashboardPage() {
           setTimeout(() => setNewId(null), 600);
         }
       } else {
-        // API responded but no scans yet — fall back to mock
-        setFeed(SCAN_FEED);
+        setFeed([]);
         setApiState('live');
       }
     } catch {
       retryCount.current++;
       setApiState(retryCount.current > 1 ? 'reconnecting' : 'connecting');
-      // Use functional update to read current feed length — avoids stale closure
-      setFeed(prev => prev.length === 0 ? SCAN_FEED : prev);
     } finally {
       setFeedLoading(false);
     }
@@ -182,18 +187,9 @@ export default function DashboardPage() {
                 </div>
               ))
             ) : (
-              // Fallback to static data if API unavailable
-              TOP_THREATS.map(t => (
-                <div className="threat-row" key={t.rank}>
-                  <span className="rank">#{String(t.rank).padStart(2,'0')}</span>
-                  <div>
-                    <div className="pkg">{t.pkg}</div>
-                    <div className="ver-tiny">{t.ver}</div>
-                  </div>
-                  <div className="score-bar"><div className="fill" style={{ width: `${t.score}%` }}></div></div>
-                  <span className="score">{t.score}</span>
-                </div>
-              ))
+              <div style={{ padding: '16px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.7 }}>
+                no threats scored yet<br/>5+ scans needed per package
+              </div>
             )}
           </div>
         </div>
@@ -209,7 +205,7 @@ export default function DashboardPage() {
             <div className="stat-mini"><div className="v">{counter.toLocaleString()}</div><div className="l">SCANS</div></div>
             <div className="stat-mini"><div className="v">{counts.BLOCK}</div><div className="l">BLOCKED</div></div>
             <div className="stat-mini"><div className="v">{feed.length}</div><div className="l">IN FEED</div></div>
-            <div className="stat-mini"><div className="v">2.7s</div><div className="l">P50 LATENCY</div></div>
+            <div className="stat-mini"><div className="v">{computeP50(feed)}</div><div className="l">P50 LATENCY</div></div>
           </div>
         </div>
 

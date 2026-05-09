@@ -1,17 +1,12 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { LivePulse } from "./LivePulse";
-import { TICKER_FEED } from "../lib/data";
 import { getScans } from "../lib/api";
 
 type TickerItem = { v: string; pkg: string; repo: string; t: string };
 
-const STATIC: TickerItem[] = TICKER_FEED.map(it => ({
-  v: it.v, pkg: it.pkg, repo: it.repo, t: it.t,
-}));
-
 export function Ticker() {
-  const [items, setItems] = useState<TickerItem[]>([...STATIC, ...STATIC]);
+  const [items, setItems] = useState<TickerItem[]>([]);
 
   useEffect(() => {
     getScans(1, 12)
