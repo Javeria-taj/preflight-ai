@@ -172,15 +172,25 @@ export async function runAnalysis(req: AnalyzeRequest): Promise<AnalyzeResponse>
 }
 
 export async function getScans(page = 1, limit = 20): Promise<ScansListResponse> {
-  const res = await fetch(`${API_URL}/scans?page=${page}&limit=${limit}`);
-  if (!res.ok) throw new Error(`Failed to fetch scans: ${res.status}`);
-  return res.json();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  try {
+    const res = await fetch(`${API_URL}/scans?page=${page}&limit=${limit}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error(`Failed to fetch scans: ${res.status}`);
+    return res.json();
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
 }
 
 export async function getScan(scanId: string): Promise<ScanDetail> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
-  
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
+
   try {
     const res = await fetch(`${API_URL}/scans/${scanId}`, {
       signal: controller.signal
@@ -196,9 +206,8 @@ export async function getScan(scanId: string): Promise<ScanDetail> {
 }
 
 export async function getTopThreats(limit = 10): Promise<PackageThreatResponse[]> {
-  // Use a 5s timeout so if the backend hangs, we quickly fall back to local mock data
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
   
   try {
     const res = await fetch(`${API_URL}/packages/top-threats?limit=${limit}`, {

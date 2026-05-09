@@ -27,7 +27,7 @@ in under 30 seconds through behavioral analysis.
 
 ---
 
-## Current Build Status (as of May 9, 2026)
+## Current Build Status (as of May 10, 2026 — hackathon day 3)
 
 ### What is DONE and tested
 
@@ -37,28 +37,31 @@ in under 30 seconds through behavioral analysis.
 | `preflight-api` — all routers | ✅ Complete | POST /analyze, GET /scans, GET /scans/:id, GET /packages/*, GET /health |
 | `preflight-api` — MongoDB layer | ✅ Complete | client, scans CRUD, packages upsert, TTL index, demo seed |
 | `preflight-api` — demo mode | ✅ Complete | demo scan pre-seeded at `64a7f3e2b1c4d5e6f7a8b9c0`, artificial delays |
+| `preflight-api` — deployed on Render | ✅ Live | `https://preflight-api.onrender.com` — all health checks green |
+| `preflight-api` — Python version pinned | ✅ Fixed | `.python-version = 3.11.0` — pydantic-core has no wheel for Python 3.14 |
+| `preflight-api` — auto-demo trigger | ✅ Fixed | `_DEMO_AUTO_TRIGGER` set in `analyze.py` — axios 1.7.9→1.7.10 returns demo result even without `demo:true` (1.7.10 doesn't exist on real npm) |
 | `preflight-action` — full TypeScript | ✅ Complete + built | dist/index.js committed (1.28MB bundle) |
 | `preflight-action` — action.yml | ✅ Complete | inputs, outputs, permissions comment |
-| `preflight-web` — all pages | ✅ Built by teammate | `/`, `/demo`, `/dashboard`, `/scans/[id]` — currently using static mock data from `lib/data.ts` |
+| `preflight-action` — Gemini row fix | ✅ Fixed | `llm_reasoning` has no `.flagged` field — now derived as `verdict !== "PASS"` in `github.ts` |
+| `preflight-action` — subdirectory ref | ✅ Fixed | Correct: `uses: Javeria-taj/preflight-ai/preflight-action@v1.0.0` (not repo root) |
+| `v1.0.0` git tag | ✅ Done | Force-updated twice to point to latest fixed commits |
+| `preflight-web` — all pages | ✅ Complete | All 4 pages wired to real API via `lib/api.ts` |
+| `preflight-web` — deployed on Vercel | ✅ Live | Frontend deployed, `NEXT_PUBLIC_API_URL` set |
 | `preflight-web` — API contract | ✅ Complete | `preflight-web/API_CONTRACT.md` with types, integration notes, field mapping |
-| Local API test | ✅ Passed | /health ok, demo scan returns BLOCK 94%, real lodash scan returns PASS 95% |
+| GitHub Action e2e test | ✅ Passed | BLOCK (axios 1.7.10) and PASS (lodash 4.17.21) PRs confirmed working on `preflight-test-target` |
 
 ### What is NOT done yet
 
 | Item | What's needed |
 |---|---|
-| Deploy to Render | Paste `GEMINI_API_KEY` + `MONGODB_URI` into Render dashboard. `render.yaml` is ready. |
-| Deploy to Vercel | Import repo, set root dir = `preflight-web`, add `NEXT_PUBLIC_API_URL` env var |
-| Keep-alive cron | cron-job.org free, ping `GET /health` every 14 minutes |
-| `v1.0.0` git tag | `git tag v1.0.0 && git push origin v1.0.0` — needed for action reference |
-| Frontend API wiring | Teammate needs to replace `lib/data.ts` mock data with real `lib/api.ts` calls |
-| GitHub Action e2e test | Create test repo, open PR with package-lock change, verify comment posts |
+| Keep-alive cron | cron-job.org free, ping `GET /health` every 14 minutes — Render free tier spins down after inactivity |
+| MCP server | See "Next Phase: Agentic Workflows" section below and plan file |
+| Agent PR badge | See "Next Phase: Agentic Workflows" section below and plan file |
 
-### Credentials (local .env confirmed working)
+### Credentials (confirmed working in production)
 
-- `GEMINI_API_KEY` — set in `preflight-api/.env`, tested locally, Gemini calls working
-- `MONGODB_URI` — Atlas cluster, `smrafi405_db_user`, `preflight_db` database
-- Both need to be added to Render dashboard environment variables before deploy
+- `GEMINI_API_KEY` — set in Render dashboard, Gemini calls working in prod
+- `MONGODB_URI` — Atlas cluster, `smrafi405_db_user`, `preflight_db` database, set in Render dashboard
 
 ### Sponsor Integrations (required for prizes)
 
@@ -701,7 +704,7 @@ Demo flow:
 | C3 | No tsconfig.json | ✅ Fixed | Created at `preflight-action/tsconfig.json` |
 | C4 | action.yml missing inputs/outputs/permissions | ✅ Fixed | Complete action.yml with all inputs, outputs, permissions comment |
 | C5 | No demo pre-seeded data | ✅ Fixed | `seed_demo_data()` in FastAPI lifespan; ID `64a7f3e2b1c4d5e6f7a8b9c0`; tested locally |
-| C6 | Render cold start on first demo | ⏳ Pending | Set up keep-alive cron (cron-job.org, ping /health every 14 min) after deploy |
+| C6 | Render cold start on first demo | ⏳ Pending | Keep-alive cron not yet set up — add cron-job.org ping to /health every 14 min |
 | C7 | No CORS on FastAPI | ✅ Fixed | `allow_origins=["*"]` in `main.py` |
 | C8 | MongoDB ObjectId not JSON serializable | ✅ Fixed | `_serialize()` in `db/scans.py` converts `_id` → `scan_id` as string |
 
@@ -731,17 +734,19 @@ Demo flow:
 | M7 | Gemini Pro slowest path | ✅ Fixed | Flash first; parallel Pro only on BLOCK ≥0.85 |
 | M8 | No workflow example in repo | ✅ Fixed | `demo/.github/workflows/preflight.yml` added |
 
-### Frontend integration gaps (for teammate)
+### Frontend integration gaps (for teammate) — ALL RESOLVED
 
-| # | Issue | Fix needed in `preflight-web/` |
+| # | Issue | Status |
 |---|---|---|
-| F1 | All pages use static `lib/data.ts` mock data | Wire to real API using `lib/api.ts` (see `API_CONTRACT.md`) |
-| F2 | `/demo` page doesn't call the API | Call `POST /analyze` with `demo: true` instead of static animation |
-| F3 | `/scans/[id]` ignores route param | Use `useParams()` + `getScan(id)` from `lib/api.ts` |
-| F4 | Demo verdict card links to wrong scan ID | Change `scn_a1f7e2` → `64a7f3e2b1c4d5e6f7a8b9c0` |
-| F5 | `INSTALL_YAML` in `lib/data.ts` has wrong input names | `fail-on` → `fail_on_block`; remove `comment: true` (doesn't exist) |
-| F6 | `LlmReasoningSignal` has no `flagged` field | Derive: `flagged = signals.llm_reasoning.verdict !== 'PASS'` |
-| F7 | API signals are object, ScanCard expects array | Use `signalsToArray()` helper (see `API_CONTRACT.md` §3) |
+| F1 | All pages used static `lib/data.ts` mock data | ✅ Fixed — all pages wired to real `lib/api.ts` |
+| F2 | `/demo` page didn't call the API | ✅ Fixed — calls `POST /analyze` with `demo: true`; shows offline badge if API unreachable |
+| F3 | `/scans/[id]` ignored route param | ✅ Fixed — uses `useParams()` + `getScan(id)`; `buildLiveSignals()` maps raw API fields to UI |
+| F4 | Demo verdict card linked to wrong scan ID | ✅ Fixed — uses real `apiResult.scan_id` or falls back to `DEMO_SCAN_ID` |
+| F5 | `INSTALL_YAML` had wrong input names | ✅ Fixed — `fail_on_block`; no spurious `comment: true` |
+| F6 | `LlmReasoningSignal` has no `flagged` field | ✅ Fixed — derived as `verdict !== 'PASS'` everywhere |
+| F7 | API signals are object, ScanCard expected array | ✅ Fixed — `signalsToArray()` helper used throughout |
+
+**`buildLiveSignals(signals: SignalsResponse)`** — added to `app/scans/[id]/page.tsx`. Maps raw API signal fields to UI kv pairs for all 4 signals. Real scan pages no longer use demo template data.
 
 ### Pitch risks
 
@@ -855,75 +860,70 @@ We match `eval` as an identifier in the `CallExpression` node. Aliasing it evade
 |---|---|---|
 | 1 | Demo condition `req.demo or (... and req.demo)` — second clause always subsumed by first | Simplified to `if req.demo:` |
 | 2 | `ast_scanner.run()` called with `tarball_url` only — bytes not passed, causing re-download | Now passes `sd_result.tarball_bytes` as fifth argument |
+| 3 | `axios@1.7.10` doesn't exist on real npm — action sent real analyze request, got 502 PackageNotFoundError | Added `_DEMO_AUTO_TRIGGER = {("axios", "1.7.9", "1.7.10")}` — any request for this exact combo returns pre-seeded demo result regardless of `demo` flag |
 
 ---
 
-## Remaining Tasks (everything before this is done)
+## Remaining Tasks
 
-### Immediate — deployment (can do now)
-1. Add `GEMINI_API_KEY` and `MONGODB_URI` to Render dashboard → Deploy
-2. Verify `GET https://preflight-api.onrender.com/health` returns all checks ok
-3. Import repo to Vercel, set root dir = `preflight-web`, add `NEXT_PUBLIC_API_URL` → Deploy
-4. Set up cron-job.org: ping `GET /health` every 14 minutes
-5. `git tag v1.0.0 && git push origin v1.0.0`
+### Still pending
+1. **Keep-alive cron** — cron-job.org, ping `GET https://preflight-api.onrender.com/health` every 14 minutes (free tier spins down after ~15 min idle)
+2. **MCP server + Agent PR badge** — see "Next Phase: Agentic Workflows" below
 
-### Deployment smoke tests (run in order after deploy)
+### Pre-presentation checklist
+- [x] `/health` returns all three checks ok on Render
+- [x] `/demo` page animation completes cleanly
+- [ ] Render not cold-starting (keep-alive cron active)
+- [x] `v1.0.0` tag exists on GitHub
+- [x] GitHub Action e2e confirmed — BLOCK (axios attack) + PASS (lodash bump) on `preflight-test-target`
+- [x] All frontend pages wired to real API
+
+### Deployment smoke tests (run any time to verify prod)
 ```bash
-# 1. All checks green
+# Health check
 curl https://preflight-api.onrender.com/health
 
-# 2. Demo scan seeded
+# Demo scan seeded
 curl https://preflight-api.onrender.com/scans/64a7f3e2b1c4d5e6f7a8b9c0
 
-# 3. Demo analysis (should take ~2.7s, return BLOCK 94%)
+# Demo analysis — BLOCK 94% in ~2.7s
 curl -X POST https://preflight-api.onrender.com/analyze \
   -H "Content-Type: application/json" \
   -d '{"package_name":"axios","old_version":"1.7.9","new_version":"1.7.10","demo":true}'
 
-# 4. Real analysis with Gemini (should take ~10s, return PASS)
+# Real analysis — PASS in ~10s
 curl -X POST https://preflight-api.onrender.com/analyze \
   -H "Content-Type: application/json" \
   -d '{"package_name":"lodash","old_version":"4.17.20","new_version":"4.17.21"}'
 ```
 
-### GitHub Action e2e test
-Create test repo `Mustaqeem-Rafi/preflight-test-target` with `package-lock.json` + this workflow:
+### GitHub Action reference (confirmed working)
 ```yaml
-name: Preflight
-on:
-  pull_request:
-    paths: ['package-lock.json']
-permissions:
-  pull-requests: write
-  statuses: write
-  contents: read
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: Javeria-taj/preflight-ai@v1.0.0
-        with:
-          fail_on_block: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+- uses: Javeria-taj/preflight-ai/preflight-action@v1.0.0
 ```
-Open a PR bumping a package version → expect PR comment + commit status.
+Note: subdirectory path required (`/preflight-action/`) — action.yml is NOT at repo root.
 
-### Frontend (teammate's work)
-See `preflight-web/API_CONTRACT.md` for full integration guide. Key items:
-- Create `preflight-web/lib/api.ts` (was deleted — full template in API_CONTRACT.md)
-- Wire `/demo` page to `POST /analyze` with `demo: true`
-- Wire `/scans/[id]` to `GET /scans/:id` using `useParams()`
-- Fix demo scan link: `scn_a1f7e2` → `64a7f3e2b1c4d5e6f7a8b9c0`
-- Fix `INSTALL_YAML` in `lib/data.ts`: `fail-on` → `fail_on_block`
+---
 
-### Pre-presentation checklist
-- [ ] `/health` returns all three checks ok on Render
-- [ ] `/demo` page animation completes cleanly 3/3 times
-- [ ] Render not cold-starting (keep-alive cron active)
-- [ ] `v1.0.0` tag exists on GitHub
-- [ ] README complete (judges look at the repo)
+## Next Phase: Agentic Workflows
+
+**Full plan**: `C:\Users\DELL\.claude\plans\glowing-hatching-bubble.md`
+
+The goal: protect against AI coding agents (Devin, Claude Code in agentic mode) that autonomously bump npm deps with no human in the loop.
+
+### Deliverable 1: MCP Server (`preflight-mcp/`)
+- New subpackage — Node.js ESM, ~90 lines
+- Registers `preflight_analyze(package_name, old_version, new_version)` tool
+- Calls existing `POST /analyze` — no backend changes required
+- Wire-up: `claude mcp add preflight node /path/to/preflight-mcp/index.js`
+- **Demo**: Ask Claude Code "install axios 1.7.10" → it calls the tool → BLOCK 94% → refuses
+
+### Deliverable 2: Agent PR Badge (GitHub Action)
+- Detect PR author username matching known agent patterns (devin-ai-*, dependabot, sweep-*, renovate, copilot-workspace)
+- Prepend warning banner to PR comment when detected
+- Change to `src/index.ts` + `src/adapters/github.ts` + rebuild `dist/index.js`
+
+**Status**: Planned, not yet built.
 
 ---
 

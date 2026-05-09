@@ -55,14 +55,18 @@ export default function ScanDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [rawScan, setRawScan] = useState<ScanDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<'not_found' | 'timeout' | null>(null);
 
   useEffect(() => {
     // For the demo scan ID, skip API call — use static data which includes iocs + kill-chain
     if (!id || id === DEMO_SCAN_ID) { setLoading(false); return; }
     getScan(id)
       .then(data => { setRawScan(data); setLoading(false); })
-      .catch(() => { setError(true); setLoading(false); });
+      .catch((err: Error) => {
+        const isTimeout = err.name === 'AbortError' || err.message.includes('aborted');
+        setError(isTimeout ? 'timeout' : 'not_found');
+        setLoading(false);
+      });
   }, [id]);
 
   // Use static data for demo scan, or normalize live data for real scans
@@ -105,8 +109,16 @@ export default function ScanDetailPage() {
   );
 
   if (error) return (
-    <div className="scan-detail" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', fontFamily: 'var(--font-mono)', color: 'var(--accent-block)', fontSize: 13 }}>
-      ✕ scan not found · <Link href="/dashboard" style={{ color: 'var(--text-secondary)', marginLeft: 8 }}>← back to feed</Link>
+    <div className="scan-detail" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', fontFamily: 'var(--font-mono)', fontSize: 13, gap: 10 }}>
+      {error === 'timeout' ? (
+        <>
+          <span style={{ color: 'var(--accent-warn)' }}>⏱ api warming up — request timed out</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>render free tier takes ~30s to start · refresh to retry</span>
+        </>
+      ) : (
+        <span style={{ color: 'var(--accent-block)' }}>✕ scan not found</span>
+      )}
+      <Link href="/dashboard" style={{ color: 'var(--text-secondary)', marginTop: 4 }}>← back to feed</Link>
     </div>
   );
 

@@ -80,8 +80,8 @@ export default function DashboardPage() {
     } catch {
       retryCount.current++;
       setApiState(retryCount.current > 1 ? 'reconnecting' : 'connecting');
-      // Only fall back to mock on first failure so we don't flash stale data
-      if (feed.length === 0) setFeed(SCAN_FEED);
+      // Use functional update to read current feed length — avoids stale closure
+      setFeed(prev => prev.length === 0 ? SCAN_FEED : prev);
     } finally {
       setFeedLoading(false);
     }
@@ -112,6 +112,7 @@ export default function DashboardPage() {
 
   const statusColor = apiState === 'live' ? 'var(--accent-pass)' : apiState === 'reconnecting' ? 'var(--accent-block)' : 'var(--accent-warn)';
   const statusLabel = apiState === 'live' ? 'LIVE' : apiState === 'reconnecting' ? 'RECONNECTING…' : 'CONNECTING…';
+  const showWarmupHint = apiState !== 'live';
 
   return (
     <div className="dashboard">
@@ -123,6 +124,7 @@ export default function DashboardPage() {
               <div style={{display:'flex', alignItems:'center', gap: 6}}><LivePulse /><span style={{ color: statusColor }}>{statusLabel}</span></div>
               <span>{counter.toLocaleString()} total scans · last 24h</span>
               <span>updates every 10s</span>
+              {showWarmupHint && <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>api warming up · may take ~30s on first load</span>}
             </div>
           </div>
           <Link className="btn ghost" href="/">↩ back to landing</Link>
