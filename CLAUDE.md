@@ -25,6 +25,41 @@ in under 30 seconds through behavioral analysis.
 - **Judge pitch**: 3 minutes + live demo
 - **Winning criteria**: Real incident anchor, live demo, one-line install
 
+---
+
+## Current Build Status (as of May 9, 2026)
+
+### What is DONE and tested
+
+| Component | Status | Notes |
+|---|---|---|
+| `preflight-api` — all 4 signal services | ✅ Complete | script_diff, ast_scanner, maintainer, gemini |
+| `preflight-api` — all routers | ✅ Complete | POST /analyze, GET /scans, GET /scans/:id, GET /packages/*, GET /health |
+| `preflight-api` — MongoDB layer | ✅ Complete | client, scans CRUD, packages upsert, TTL index, demo seed |
+| `preflight-api` — demo mode | ✅ Complete | demo scan pre-seeded at `64a7f3e2b1c4d5e6f7a8b9c0`, artificial delays |
+| `preflight-action` — full TypeScript | ✅ Complete + built | dist/index.js committed (1.28MB bundle) |
+| `preflight-action` — action.yml | ✅ Complete | inputs, outputs, permissions comment |
+| `preflight-web` — all pages | ✅ Built by teammate | `/`, `/demo`, `/dashboard`, `/scans/[id]` — currently using static mock data from `lib/data.ts` |
+| `preflight-web` — API contract | ✅ Complete | `preflight-web/API_CONTRACT.md` with types, integration notes, field mapping |
+| Local API test | ✅ Passed | /health ok, demo scan returns BLOCK 94%, real lodash scan returns PASS 95% |
+
+### What is NOT done yet
+
+| Item | What's needed |
+|---|---|
+| Deploy to Render | Paste `GEMINI_API_KEY` + `MONGODB_URI` into Render dashboard. `render.yaml` is ready. |
+| Deploy to Vercel | Import repo, set root dir = `preflight-web`, add `NEXT_PUBLIC_API_URL` env var |
+| Keep-alive cron | cron-job.org free, ping `GET /health` every 14 minutes |
+| `v1.0.0` git tag | `git tag v1.0.0 && git push origin v1.0.0` — needed for action reference |
+| Frontend API wiring | Teammate needs to replace `lib/data.ts` mock data with real `lib/api.ts` calls |
+| GitHub Action e2e test | Create test repo, open PR with package-lock change, verify comment posts |
+
+### Credentials (local .env confirmed working)
+
+- `GEMINI_API_KEY` — set in `preflight-api/.env`, tested locally, Gemini calls working
+- `MONGODB_URI` — Atlas cluster, `smrafi405_db_user`, `preflight_db` database
+- Both need to be added to Render dashboard environment variables before deploy
+
 ### Sponsor Integrations (required for prizes)
 
 | Sponsor | How we use it | Tier |
@@ -574,18 +609,24 @@ Required `tsconfig.json` (at `preflight-action/tsconfig.json`):
 
 ### preflight-api
 
-Corrected `requirements.txt` (remove `acorn-py`, add `uvicorn`, version pin everything):
+`requirements.txt` — confirmed working on Python 3.11 (Render) and Python 3.13 (local):
 ```
 fastapi==0.115.0
 uvicorn[standard]==0.30.0
-pydantic==2.7.0
-pydantic-settings==2.3.0
-motor==3.4.0
-google-generativeai==0.8.0
-requests==2.32.0
+pydantic==2.10.6
+pydantic-settings==2.7.0
+motor==3.7.0
+google-generativeai==0.8.3
+requests==2.32.3
 httpx==0.27.0
 python-multipart==0.0.9
 ```
+
+**Why these versions (not the originals):**
+- `pydantic 2.7.0` had no Python 3.13 wheel — needed source build with Rust/MSVC which fails on most setups. `2.10.6` ships prebuilt wheels for 3.13.
+- `motor 3.4.0` tried to import `_QUERY_OPTIONS` from `pymongo.cursor` — removed in pymongo 4.10. `motor 3.7.0` is explicitly compatible with pymongo 4.9+.
+
+**acorn** is managed via `preflight-api/package.json` (committed). `npm install acorn` runs as part of `render.yaml` buildCommand. Locally, run `npm install acorn` from `preflight-api/` before starting the server.
 
 ### preflight-web
 
@@ -653,42 +694,54 @@ Demo flow:
 
 ### CRITICAL — will break demo
 
-| # | Risk | Resolution |
-|---|---|---|
-| C1 | `acorn-py` doesn't exist on PyPI | Use Node.js subprocess (see Tech Stack section) |
-| C2 | `preflight-action/package.json` has empty deps | Add all deps listed in Build Tooling section |
-| C3 | No tsconfig.json | Create at `preflight-action/tsconfig.json` |
-| C4 | action.yml missing inputs/outputs/permissions | See action.yml requirements section above |
-| C5 | No demo pre-seeded data | Implement seed_demo_data() in lifespan startup |
-| C6 | Render cold start on first demo | Set up keep-alive cron before first presentation |
-| C7 | No CORS on FastAPI | Add `CORSMiddleware` allowing Vercel domain |
-| C8 | MongoDB ObjectId not JSON serializable | Use `str(_id)` in all Pydantic response models |
+| # | Risk | Status | Resolution |
+|---|---|---|---|
+| C1 | `acorn-py` doesn't exist on PyPI | ✅ Fixed | Node.js subprocess implemented in `ast_scanner.py`; `package.json` + `npm install acorn` in `render.yaml` |
+| C2 | `preflight-action/package.json` has empty deps | ✅ Fixed | All deps added: @actions/core, @actions/github, zod, node-fetch, ncc |
+| C3 | No tsconfig.json | ✅ Fixed | Created at `preflight-action/tsconfig.json` |
+| C4 | action.yml missing inputs/outputs/permissions | ✅ Fixed | Complete action.yml with all inputs, outputs, permissions comment |
+| C5 | No demo pre-seeded data | ✅ Fixed | `seed_demo_data()` in FastAPI lifespan; ID `64a7f3e2b1c4d5e6f7a8b9c0`; tested locally |
+| C6 | Render cold start on first demo | ⏳ Pending | Set up keep-alive cron (cron-job.org, ping /health every 14 min) after deploy |
+| C7 | No CORS on FastAPI | ✅ Fixed | `allow_origins=["*"]` in `main.py` |
+| C8 | MongoDB ObjectId not JSON serializable | ✅ Fixed | `_serialize()` in `db/scans.py` converts `_id` → `scan_id` as string |
 
 ### HIGH — correctness bugs
 
-| # | Risk | Resolution |
-|---|---|---|
-| H1 | npm API has no signing_key_fingerprint field | Use Sigstore provenance: check dist.signatures + _attestations; flag if absent on new version but present on old |
-| H2 | acorn fails on shell scripts | Run shell regex scanner first; only call acorn if hook is `node <file>` or inline JS |
-| H3 | require('https') standalone causes false positives | Flag only combinations: `require('https')` + `process.spawn` in same script |
-| H4 | acorn must follow file paths into tarball | If hook is `node ./scripts/setup.js`, extract that file from tarball, then parse |
-| H5 | Gemini prompt not written | See Gemini Prompt Template section above — use exactly as specified |
-| H6 | Gemini fail-safe logic not written | See Gemini Fail-Safe section above |
-| H7 | Demo runs pollute community scores | Add `is_demo: bool` to scans; exclude from score calculations |
-| H8 | Multi-package PRs hit Gemini rate limits | Process sequentially, 1s delay, cap at 3 per PR run |
+| # | Risk | Status | Notes |
+|---|---|---|---|
+| H1 | npm API has no signing_key_fingerprint | ✅ Fixed | Using `dist.signatures` + `dist.attestations` (Sigstore) in `maintainer.py` |
+| H2 | acorn fails on shell scripts | ✅ Fixed | Shell regex runs first; acorn only called if hook is `node <file>` or inline JS |
+| H3 | require('https') standalone = false positive | ✅ Fixed | Only flags combinations: outbound net + spawn/eval in same script |
+| H4 | acorn must follow file paths into tarball | ✅ Fixed | `_fetch_file_from_tarball()` in `ast_scanner.py` extracts the JS file then parses |
+| H5 | Gemini prompt not written | ✅ Fixed | Full few-shot prompt with 3 examples in `gemini.py` |
+| H6 | Gemini fail-safe not written | ✅ Fixed | `_rule_based_fallback()` in `gemini.py` |
+| H7 | Demo runs pollute community scores | ✅ Fixed | `is_demo: true` excluded from all `packages.py` upsert calculations |
+| H8 | Multi-package PRs hit Gemini rate limits | ✅ Fixed | Sequential processing, 1s delay, cap 3 per PR in `src/index.ts` |
 
 ### MEDIUM — edge cases
 
-| # | Risk | Resolution |
+| # | Risk | Status | Notes |
+|---|---|---|---|
+| M1 | old_version=null crashes Signal 1 | ✅ Fixed | Handles null: any hook on new dep = HIGH flag |
+| M2 | GET /packages/:name/threat with <5 scans | ✅ Fixed | Returns `{score: null, reason: "insufficient_data"}` |
+| M3 | No rate limiting on POST /analyze | ⚠️ Open | Not implemented — acceptable for hackathon |
+| M4 | package_name path traversal | ✅ Fixed | NPM_NAME_RE regex validates before any file I/O |
+| M5 | safe_versions[] cap | ✅ Fixed | `$push` with `$slice: -20` in `packages.py` |
+| M6 | SHA pinning in docs | ✅ Fixed | All examples use `@v1.0.0` |
+| M7 | Gemini Pro slowest path | ✅ Fixed | Flash first; parallel Pro only on BLOCK ≥0.85 |
+| M8 | No workflow example in repo | ✅ Fixed | `demo/.github/workflows/preflight.yml` added |
+
+### Frontend integration gaps (for teammate)
+
+| # | Issue | Fix needed in `preflight-web/` |
 |---|---|---|
-| M1 | new_package (old_version=null) crashes Signal 1 | Skip diff; any hook on new dep = HIGH flag |
-| M2 | GET /packages/:name/threat with <5 scans | Return `{score: null, reason: "insufficient_data"}` not 404 |
-| M3 | No rate limiting on POST /analyze | Add simple IP-based rate limiting (10 req/min/IP) using a middleware |
-| M4 | package_name path traversal in tarball extraction | Validate against npm name regex before any file I/O |
-| M5 | safe_versions[] cap eviction not defined | `$push` with `$slice: -20` (keep last 20 newest) |
-| M6 | SHA pinning contradiction in docs | Use `@v1.0.0` in all public YAML snippets, never `@v1` |
-| M7 | Gemini Pro for BLOCK is slowest path | Flash first; if BLOCK ≥0.85, parallel Pro confirm; never block comment on Pro alone |
-| M8 | No .github/workflows/ example in repo | Add `demo/.github/workflows/preflight.yml` as a copyable example |
+| F1 | All pages use static `lib/data.ts` mock data | Wire to real API using `lib/api.ts` (see `API_CONTRACT.md`) |
+| F2 | `/demo` page doesn't call the API | Call `POST /analyze` with `demo: true` instead of static animation |
+| F3 | `/scans/[id]` ignores route param | Use `useParams()` + `getScan(id)` from `lib/api.ts` |
+| F4 | Demo verdict card links to wrong scan ID | Change `scn_a1f7e2` → `64a7f3e2b1c4d5e6f7a8b9c0` |
+| F5 | `INSTALL_YAML` in `lib/data.ts` has wrong input names | `fail-on` → `fail_on_block`; remove `comment: true` (doesn't exist) |
+| F6 | `LlmReasoningSignal` has no `flagged` field | Derive: `flagged = signals.llm_reasoning.verdict !== 'PASS'` |
+| F7 | API signals are object, ScanCard expects array | Use `signalsToArray()` helper (see `API_CONTRACT.md` §3) |
 
 ### Pitch risks
 
@@ -700,52 +753,72 @@ Demo flow:
 
 ---
 
-## 48-Hour Build Order (updated with gap fixes)
+## Remaining Tasks (everything before this is done)
 
-### Pre-code (1 hour, do first)
-1. Write Gemini prompt in `preflight-api/app/services/gemini_prompt.txt` (see template above)
-2. Define shell regex patterns in `preflight-api/app/services/shell_patterns.py`
-3. Create MongoDB demo seed document (exact values for axios BLOCK scenario)
-4. Verify Gemini API key works with a direct `curl` test
+### Immediate — deployment (can do now)
+1. Add `GEMINI_API_KEY` and `MONGODB_URI` to Render dashboard → Deploy
+2. Verify `GET https://preflight-api.onrender.com/health` returns all checks ok
+3. Import repo to Vercel, set root dir = `preflight-web`, add `NEXT_PUBLIC_API_URL` → Deploy
+4. Set up cron-job.org: ping `GET /health` every 14 minutes
+5. `git tag v1.0.0 && git push origin v1.0.0`
 
-### Hours 0–8 | Foundation
-- `npm install` with correct deps in preflight-action
-- `tsconfig.json` + build script working (`npm run build` outputs `dist/index.js`)
-- FastAPI: `/health` returns all 3 checks (MongoDB, npm registry, Gemini)
-- MongoDB Atlas: connection verified, indexes created
-- CORS middleware added to FastAPI
-- `seed_demo_data()` in FastAPI lifespan — demo scan pre-seeded at startup
-- Verdaccio running locally with mock axios 1.7.10 published
+### Deployment smoke tests (run in order after deploy)
+```bash
+# 1. All checks green
+curl https://preflight-api.onrender.com/health
 
-### Hours 8–20 | Core Engine
-- Signal 1: fetch tarballs, extract hooks, diff — handles null old_version
-- Signal 2: shell regex scanner + acorn subprocess path + tarball file extraction
-- Signal 3: npm registry, provenance check (dist.signatures), risk_score formula
-- POST /analyze: wires all 3 signals + demo_mode bypass
-- MongoDB write on every scan (scans + packages upsert)
-- ObjectId serialization tested end-to-end
+# 2. Demo scan seeded
+curl https://preflight-api.onrender.com/scans/64a7f3e2b1c4d5e6f7a8b9c0
 
-### Hours 20–32 | Gemini + Integration
-- Signal 4: Gemini Flash with structured prompt + fail-safe fallback
-- Gemini Pro parallel confirmation for BLOCK verdicts
-- GitHub Action: parse package-lock.json diff, call API, post PR comment
-- action.yml: complete with inputs, outputs, permissions block
-- `dist/index.js` built and committed (actions need pre-built dist)
-- Keep-alive cron set up on Render
+# 3. Demo analysis (should take ~2.7s, return BLOCK 94%)
+curl -X POST https://preflight-api.onrender.com/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"package_name":"axios","old_version":"1.7.9","new_version":"1.7.10","demo":true}'
 
-### Hours 32–42 | Demo + Polish
-- End-to-end demo: real PR → action triggers → BLOCK verdict → PR comment
-- Deploy FastAPI to Render, verify /health
-- Deploy Next.js to Vercel
-- /demo page fully animated with sequential signal rows
-- /scans/:id complete
-- Landing page complete with live stat counters
+# 4. Real analysis with Gemini (should take ~10s, return PASS)
+curl -X POST https://preflight-api.onrender.com/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"package_name":"lodash","old_version":"4.17.20","new_version":"4.17.21"}'
+```
 
-### Hours 42–48 | Buffer + Presentation
-- Freeze code
-- Run demo 10 times without failure
-- Practice 3-minute pitch
-- README complete (judges will look at the repo)
+### GitHub Action e2e test
+Create test repo `Mustaqeem-Rafi/preflight-test-target` with `package-lock.json` + this workflow:
+```yaml
+name: Preflight
+on:
+  pull_request:
+    paths: ['package-lock.json']
+permissions:
+  pull-requests: write
+  statuses: write
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Javeria-taj/preflight-ai@v1.0.0
+        with:
+          fail_on_block: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+Open a PR bumping a package version → expect PR comment + commit status.
+
+### Frontend (teammate's work)
+See `preflight-web/API_CONTRACT.md` for full integration guide. Key items:
+- Create `preflight-web/lib/api.ts` (was deleted — full template in API_CONTRACT.md)
+- Wire `/demo` page to `POST /analyze` with `demo: true`
+- Wire `/scans/[id]` to `GET /scans/:id` using `useParams()`
+- Fix demo scan link: `scn_a1f7e2` → `64a7f3e2b1c4d5e6f7a8b9c0`
+- Fix `INSTALL_YAML` in `lib/data.ts`: `fail-on` → `fail_on_block`
+
+### Pre-presentation checklist
+- [ ] `/health` returns all three checks ok on Render
+- [ ] `/demo` page animation completes cleanly 3/3 times
+- [ ] Render not cold-starting (keep-alive cron active)
+- [ ] `v1.0.0` tag exists on GitHub
+- [ ] README complete (judges look at the repo)
 
 ---
 
