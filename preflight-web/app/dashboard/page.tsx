@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { LivePulse } from "@/components/LivePulse";
 import { ScanCard } from "@/components/ScanCard";
-import { getScans, getTopThreats, normalizeScan, PackageThreatResponse } from "@/lib/api";
+import { getScans, getTopThreats, getAdvisoryFeed, normalizeScan, PackageThreatResponse } from "@/lib/api";
 import Link from "next/link";
 
 // ── P50 latency computed from actual feed durations ──────────────────────
@@ -57,15 +57,20 @@ function SkeletonRow() {
 
 export default function DashboardPage() {
   const [feed, setFeed] = useState<any[]>([]);
+  const [advisoryFeed, setAdvisoryFeed] = useState<any[]>([]);
   const [feedLoading, setFeedLoading] = useState(true);
   const [topThreats, setTopThreats] = useState<PackageThreatResponse[] | null>(null);
   const [threatsLoading, setThreatsLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filter, setFilter] = useState('all');
   const [newId, setNewId] = useState<string | null>(null);
-  const [counter, setCounter] = useState(142039);
   const [apiState, setApiState] = useState<'connecting' | 'live' | 'reconnecting'>('connecting');
   const retryCount = useRef(0);
+
+  const combinedFeed = React.useMemo(() =>
+    [...feed, ...advisoryFeed].sort((a, b) =>
+      new Date(b.scannedAt).getTime() - new Date(a.scannedAt).getTime()
+    ), [feed, advisoryFeed]);
 
   const fetchLiveFeed = async () => {
     try {
@@ -98,21 +103,20 @@ export default function DashboardPage() {
     getTopThreats(5)
       .then(data => { setTopThreats(data); setThreatsLoading(false); })
       .catch(() => { setTopThreats(null); setThreatsLoading(false); });
-    // Poll every 10s
+    // Fetch advisories once — GitHub rate limit 60/hr, advisories update daily
+    getAdvisoryFeed().then(setAdvisoryFeed).catch(() => {});
+    // Poll backend scans every 10s
     const pollMs = parseInt(process.env.NEXT_PUBLIC_POLL_INTERVAL_MS ?? '10000');
     const interval = setInterval(fetchLiveFeed, pollMs);
-    const counterT = setInterval(() => {
-      setCounter(c => c + Math.floor(2 + Math.random() * 6));
-    }, 7500);
-    return () => { clearInterval(interval); clearInterval(counterT); };
+    return () => clearInterval(interval);
   }, []);
 
-  const filtered = filter === 'all' ? feed : feed.filter((s: any) => s.verdict === filter.toUpperCase());
+  const filtered = filter === 'all' ? combinedFeed : combinedFeed.filter((s: any) => s.verdict === filter.toUpperCase());
   const counts: Record<string, number> = {
-    all: feed.length,
-    BLOCK: feed.filter((s: any) => s.verdict === 'BLOCK').length,
-    WARN: feed.filter((s: any) => s.verdict === 'WARN').length,
-    PASS: feed.filter((s: any) => s.verdict === 'PASS').length,
+    all: combinedFeed.length,
+    BLOCK: combinedFeed.filter((s: any) => s.verdict === 'BLOCK').length,
+    WARN: combinedFeed.filter((s: any) => s.verdict === 'WARN').length,
+    PASS: combinedFeed.filter((s: any) => s.verdict === 'PASS').length,
   };
 
   const statusColor = apiState === 'live' ? 'var(--accent-pass)' : apiState === 'reconnecting' ? 'var(--accent-block)' : 'var(--accent-warn)';
@@ -127,7 +131,7 @@ export default function DashboardPage() {
             <h1>Live community feed</h1>
             <div className="sub">
               <div style={{display:'flex', alignItems:'center', gap: 6}}><LivePulse /><span style={{ color: statusColor }}>{statusLabel}</span></div>
-              <span>{counter.toLocaleString()} total scans · last 24h</span>
+              <span>{combinedFeed.length.toLocaleString()} entries · last 24h</span>
               <span>updates every 10s</span>
               {showWarmupHint && <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>api warming up · may take ~30s on first load</span>}
             </div>
@@ -196,15 +200,15 @@ export default function DashboardPage() {
 
         <div className="panel">
           <div className="panel-head"><span><span className="acc">●</span> VERDICT DISTRIBUTION</span><span>current feed</span></div>
-          <LiveHistogram feed={feed} />
+          <LiveHistogram feed={combinedFeed} />
         </div>
 
         <div className="panel">
           <div className="panel-head"><span><span className="acc">●</span> TODAY'S STATS</span><span>{new Date().toISOString().slice(0,10)}</span></div>
           <div className="stats-mini">
-            <div className="stat-mini"><div className="v">{counter.toLocaleString()}</div><div className="l">SCANS</div></div>
+            <div className="stat-mini"><div className="v">{combinedFeed.length}</div><div className="l">IN FEED</div></div>
             <div className="stat-mini"><div className="v">{counts.BLOCK}</div><div className="l">BLOCKED</div></div>
-            <div className="stat-mini"><div className="v">{feed.length}</div><div className="l">IN FEED</div></div>
+            <div className="stat-mini"><div className="v">{feed.length}</div><div className="l">SCANS</div></div>
             <div className="stat-mini"><div className="v">{computeP50(feed)}</div><div className="l">P50 LATENCY</div></div>
           </div>
         </div>

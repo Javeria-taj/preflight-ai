@@ -64,9 +64,16 @@ export function ScanCard({ scan, expanded, onToggle, isNew }: any) {
         <div className="scan-card-expanded">
           <p>{scan.summary}</p>
           <div className="row">
-            <Link className="btn ghost" href={`/scans/${scan.id}`} onClick={(e) => { e.stopPropagation(); }}>
-              View full scan →
-            </Link>
+            {scan.advisoryUrl ? (
+              <a className="btn ghost" href={scan.advisoryUrl} target="_blank" rel="noopener noreferrer"
+                 onClick={(e) => e.stopPropagation()}>
+                View advisory ↗
+              </a>
+            ) : (
+              <Link className="btn ghost" href={`/scans/${scan.id}`} onClick={(e) => e.stopPropagation()}>
+                View full scan →
+              </Link>
+            )}
           </div>
         </div>
       )}
