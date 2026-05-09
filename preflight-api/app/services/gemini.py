@@ -9,12 +9,13 @@ from typing import Any
 import google.generativeai as genai
 
 from app.config.settings import settings
-from app.errors import GeminiError
 
 log = logging.getLogger(__name__)
 
 _FLASH_MODEL = "gemini-2.5-flash"
 _PRO_MODEL = "gemini-2.5-pro"
+
+genai.configure(api_key=settings.gemini_api_key)
 
 _PROMPT_TEMPLATE = """You are a senior supply chain security researcher. Analyze the following npm package upgrade signals and output a verdict.
 
@@ -66,26 +67,30 @@ def _rule_based_fallback(signals: dict[str, Any]) -> LlmResult:
 
 
 def _parse_gemini_response(text: str) -> LlmResult:
-    # Strip markdown code fences if present
     text = text.strip()
     if text.startswith("```"):
         text = "\n".join(text.split("\n")[1:])
     if text.endswith("```"):
         text = "\n".join(text.split("\n")[:-1])
     data = json.loads(text.strip())
+
+    verdict = data.get("verdict", "WARN")
+    if verdict not in ("PASS", "WARN", "BLOCK"):
+        verdict = "WARN"
+    confidence = max(0.0, min(1.0, float(data.get("confidence", 0.5))))
+
     return LlmResult(
-        verdict=data["verdict"],
-        confidence=float(data["confidence"]),
-        summary=data["summary"],
+        verdict=verdict,
+        confidence=confidence,
+        summary=data.get("summary", "No summary provided."),
         attack_pattern=data.get("attack_pattern"),
     )
 
 
 async def _call_gemini(model_name: str, prompt: str) -> LlmResult:
-    genai.configure(api_key=settings.gemini_api_key)
     model = genai.GenerativeModel(model_name)
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     response = await loop.run_in_executor(
         None,
         lambda: model.generate_content(

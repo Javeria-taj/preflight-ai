@@ -74,13 +74,20 @@ async def run(package_name: str, old_version: str | None, new_version: str) -> M
 
     if r.status_code == 404:
         raise PackageNotFoundError(f"Package {package_name} not found")
-    r.raise_for_status()
+    try:
+        r.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        raise RegistryTimeoutError(
+            f"Registry returned {e.response.status_code} for {package_name}"
+        )
     data = r.json()
 
     versions = data.get("versions", {})
     time_map = data.get("time", {})
 
-    new_version_data = versions.get(new_version, {})
+    new_version_data = versions.get(new_version)
+    if new_version_data is None:
+        raise PackageNotFoundError(f"Version {new_version} not found in registry for {package_name}")
     old_version_data = versions.get(old_version, {}) if old_version else {}
 
     # Provenance check

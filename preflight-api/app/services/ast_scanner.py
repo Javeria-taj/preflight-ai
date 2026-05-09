@@ -2,6 +2,7 @@
 
 import io
 import json
+import logging
 import re
 import subprocess
 import tarfile
@@ -9,8 +10,9 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from app.config.settings import settings
 from app.errors import RegistryTimeoutError
+
+log = logging.getLogger(__name__)
 
 # Shell patterns that indicate malicious behaviour
 _SHELL_PATTERNS: list[tuple[str, str]] = [
@@ -38,23 +40,22 @@ catch(e) { console.log(JSON.stringify({error: e.message})); process.exit(0); }
 const patterns = new Set();
 let hasNet = false;
 let hasSpawn = false;
-let hasEval = false;
-let hasDynamicRequire = false;
 
 function walk(node) {
   if (!node || typeof node !== 'object') return;
+
   if (node.type === 'CallExpression') {
     const callee = node.callee;
     // eval(non-literal)
     if (callee.type === 'Identifier' && callee.name === 'eval') {
       const arg = node.arguments[0];
-      if (arg && arg.type !== 'Literal') { hasEval = true; patterns.add('eval_dynamic'); }
+      if (arg && arg.type !== 'Literal') { patterns.add('eval_dynamic'); }
     }
-    // new Function(string_var)
+    // Function('code') — call form
     if (callee.type === 'Identifier' && callee.name === 'Function') {
       patterns.add('new_function');
     }
-    // process.spawn / exec / execSync / spawnSync with variable arg
+    // process.spawn / exec / execSync / spawnSync with any arg
     if (callee.type === 'MemberExpression') {
       const prop = callee.property.name || '';
       if (['spawn','exec','execSync','execFileSync','spawnSync'].includes(prop)) {
@@ -69,13 +70,11 @@ function walk(node) {
       if (arg && arg.type === 'Literal' && ['http','https','net'].includes(arg.value)) {
         hasNet = true;
       }
-      // require(variable) — dynamic require
       if (arg && arg.type !== 'Literal') {
-        hasDynamicRequire = true;
         patterns.add('dynamic_require');
       }
     }
-    // Buffer.from(longBase64)
+    // Buffer.from(longBase64, 'base64')
     if (callee.type === 'MemberExpression' &&
         callee.object.name === 'Buffer' && callee.property.name === 'from') {
       const arg0 = node.arguments[0];
@@ -86,6 +85,14 @@ function walk(node) {
       }
     }
   }
+
+  // new Function('code') — new-expression form (distinct from CallExpression)
+  if (node.type === 'NewExpression') {
+    if (node.callee.type === 'Identifier' && node.callee.name === 'Function') {
+      patterns.add('new_function');
+    }
+  }
+
   for (const key of Object.keys(node)) {
     const child = node[key];
     if (Array.isArray(child)) child.forEach(walk);
@@ -94,14 +101,13 @@ function walk(node) {
 }
 walk(ast);
 
-// Only flag net if combined with spawn
+// Only flag net if combined with spawn — standalone require('https') is not suspicious
 if (hasNet && hasSpawn) patterns.add('outbound_https');
-if (hasNet && !hasSpawn) {} // standalone net call — not flagged
 
 console.log(JSON.stringify({ patterns: Array.from(patterns) }));
 """
 
-_REGISTRY_TIMEOUT = 10.0
+_TARBALL_TIMEOUT = 30.0
 
 
 @dataclass
@@ -132,30 +138,39 @@ def _run_acorn(js_code: str) -> list[str]:
             return []
         data = json.loads(result.stdout.strip())
         return data.get("patterns", [])
-    except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError) as e:
+        log.warning("acorn scan failed: %s", e)
         return []
 
 
-async def _fetch_file_from_tarball(
-    tarball_url: str, file_path: str
-) -> str | None:
-    async with httpx.AsyncClient(timeout=_REGISTRY_TIMEOUT) as client:
+def _extract_js_from_tarball(raw: bytes, file_path: str) -> str | None:
+    normalized = file_path.lstrip("./")
+    candidate = f"package/{normalized}"
+    try:
+        with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as tar:
+            try:
+                member = tar.getmember(candidate)
+                f = tar.extractfile(member)
+                return f.read().decode("utf-8", errors="replace") if f else None
+            except KeyError:
+                return None
+    except tarfile.TarError:
+        return None
+
+
+async def _fetch_tarball_bytes(tarball_url: str) -> bytes | None:
+    async with httpx.AsyncClient(timeout=_TARBALL_TIMEOUT) as client:
         try:
             r = await client.get(tarball_url)
         except httpx.TimeoutException:
             raise RegistryTimeoutError("Tarball download timed out")
-    r.raise_for_status()
-
-    with tarfile.open(fileobj=io.BytesIO(r.content), mode="r:gz") as tar:
-        # Normalize path: node ./scripts/setup.js → package/scripts/setup.js
-        normalized = file_path.lstrip("./")
-        candidate = f"package/{normalized}"
         try:
-            member = tar.getmember(candidate)
-            f = tar.extractfile(member)
-            return f.read().decode("utf-8", errors="replace") if f else None
-        except KeyError:
-            return None
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise RegistryTimeoutError(
+                f"Tarball CDN returned {e.response.status_code}"
+            )
+    return r.content
 
 
 async def run(
@@ -163,30 +178,33 @@ async def run(
     new_version: str,
     hooks: dict[str, str],
     tarball_url: str | None = None,
+    tarball_bytes: bytes | None = None,
 ) -> AstScanResult:
     all_patterns: list[str] = []
 
-    for hook_name, hook_value in hooks.items():
+    for hook_value in hooks.values():
         # Step 1: shell regex scan
-        shell_hits = _scan_shell(hook_value)
-        all_patterns.extend(shell_hits)
+        all_patterns.extend(_scan_shell(hook_value))
 
-        # Step 2: AST scan
+        # Step 2: AST scan — only if hook invokes a JS file or inline JS
         js_code: str | None = None
 
-        # If hook calls a node script file, extract it from tarball
         node_file_match = re.match(r"^node\s+([^\s]+\.(?:js|mjs|cjs))", hook_value.strip())
         if node_file_match and tarball_url:
-            js_code = await _fetch_file_from_tarball(tarball_url, node_file_match.group(1))
+            raw = tarball_bytes or await _fetch_tarball_bytes(tarball_url)
+            if raw:
+                js_code = _extract_js_from_tarball(raw, node_file_match.group(1))
         elif re.match(r"^node\s+-e\s+", hook_value.strip()):
-            # inline: node -e "..."
-            inline_match = re.match(r'^node\s+-e\s+["\'](.+)["\']$', hook_value.strip(), re.DOTALL)
-            if inline_match:
-                js_code = inline_match.group(1)
+            # Extract inline JS: node -e "code" or node -e 'code' or node -e code
+            m = re.search(r'node\s+-e\s+(.+)$', hook_value.strip(), re.DOTALL)
+            if m:
+                arg = m.group(1).strip()
+                if len(arg) >= 2 and arg[0] in ('"', "'") and arg[-1] == arg[0]:
+                    arg = arg[1:-1]
+                js_code = arg
 
         if js_code:
-            ast_patterns = _run_acorn(js_code)
-            all_patterns.extend(ast_patterns)
+            all_patterns.extend(_run_acorn(js_code))
 
     if not all_patterns:
         return AstScanResult(flagged=False, reason="No dangerous patterns detected")

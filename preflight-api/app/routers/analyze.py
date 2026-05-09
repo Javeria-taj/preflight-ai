@@ -31,7 +31,7 @@ _DEMO_SIGNAL_DELAYS = [0.5, 0.7, 0.6, 0.9]
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(req: AnalyzeRequest):
     # Demo mode — return pre-seeded result with staggered artificial delays
-    if req.demo or (req.package_name == "axios" and req.old_version == "1.7.9" and req.new_version == "1.7.10" and req.demo):
+    if req.demo:
         for delay in _DEMO_SIGNAL_DELAYS:
             await asyncio.sleep(delay)
         scan = await scans_db.get_scan(DEMO_SCAN_ID)
@@ -64,7 +64,7 @@ async def analyze(req: AnalyzeRequest):
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="Script diff timed out")
 
-    # Signal 2 — re-use hook content + tarball URL from Signal 1 to avoid re-fetching
+    # Signal 2 — re-use hook content + tarball bytes from Signal 1 to avoid re-fetching
     try:
         ast_result = await asyncio.wait_for(
             ast_scanner.run(
@@ -72,6 +72,7 @@ async def analyze(req: AnalyzeRequest):
                 req.new_version,
                 sd_result.hooks_content,
                 sd_result.tarball_url,
+                sd_result.tarball_bytes,
             ),
             timeout=35.0,
         )
