@@ -1,6 +1,6 @@
 # Preflight — Build Status & Tasks
 
-## Current Build Status (as of May 10, 2026 — hackathon day 3)
+## Current Build Status (as of May 10, 2026 — hackathon day 3, final session)
 
 ### Done and tested
 
@@ -24,6 +24,12 @@
 | `preflight-web` — API contract | ✅ Complete | `preflight-web/API_CONTRACT.md` with types, integration notes, field mapping |
 | Keep-alive cron | ✅ Done | cron-job.org pings `GET /health` every 14 minutes |
 | GitHub Action e2e test | ✅ Passed | BLOCK (axios 1.7.10) and PASS (lodash 4.17.21) PRs confirmed on `preflight-test-target` |
+| `preflight-api` — community scan seeding | ✅ Complete | `seed_community_scans()` in `db/scans.py` seeds 15 non-demo scans (2 BLOCK, 3 WARN, 10 PASS) on startup if fewer than 5 community scans exist; fixes empty feed |
+| `preflight-web` — GitHub Advisory feed | ✅ Complete | `getAdvisoryFeed()` in `lib/api.ts` fetches npm advisories from public GitHub CORS API; interleaved into Ticker and merged into dashboard feed via `Promise.allSettled` |
+| `preflight-web` — dashboard real stats | ✅ Complete | Removed hardcoded `142039` counter and fake increment interval; all counts derived from real `combinedFeed` (backend scans + advisories sorted by `scannedAt`) |
+| `preflight-web` — landing page real stats | ✅ Complete | `getScans(1, 100)` now computes scan count, block count, and unique repo count — no hardcoded seeds |
+| `preflight-web` — ScanCard advisory link | ✅ Complete | Expanded section conditionally renders external "View advisory ↗" link (advisory items) vs internal "View full scan →" link (real scans) based on `advisoryUrl` presence |
+| `CLAUDE.md` restructured | ✅ Done | Slimmed to 30-line index with `@`-imports; 8 topic-focused files in `docs/` |
 
 ### Not done yet
 
@@ -43,6 +49,9 @@
 - [x] GitHub Action e2e confirmed — BLOCK (axios attack) + PASS (lodash bump)
 - [x] All frontend pages wired to real API
 - [x] No mock data in frontend
+- [x] Community scan feed seeded — 15 non-demo scans in MongoDB on first startup
+- [x] GitHub Advisory API enriching Ticker + dashboard with real npm vulnerability data
+- [x] All dashboard/landing stats computed from real API data (no fake seeds)
 
 ---
 
@@ -127,3 +136,7 @@ Note: subdirectory path required (`/preflight-action/`) — action.yml is NOT at
 | F6 | `LlmReasoningSignal` has no `flagged` field | ✅ Fixed — derived as `verdict !== 'PASS'` everywhere |
 | F7 | API signals are object, ScanCard expected array | ✅ Fixed — `signalsToArray()` helper used throughout |
 | F8 | Mock data used as fallback throughout | ✅ Fixed — TICKER_FEED, SCAN_FEED, TOP_THREATS, SCAN_DETAIL_AXIOS all deleted |
+| F9 | Community feed empty — only demo scan in MongoDB (`is_demo: true` excluded from feed) | ✅ Fixed — `seed_community_scans()` in `db/scans.py` inserts 15 realistic non-demo scans on API startup if fewer than 5 exist |
+| F10 | Dashboard counter hardcoded at 142,039 with fake increment interval | ✅ Fixed — counter state removed; header and stats panel derive counts from real `combinedFeed.length` |
+| F11 | Landing page stats hardcoded (142039 scans, 1247 repos, 2847 repo counter) | ✅ Fixed — `getScans(1, 100)` on mount computes real scan count, block count, and unique repo count via `new Set` |
+| F12 | Ticker + dashboard feed sparse when only seeded scans exist | ✅ Fixed — `getAdvisoryFeed()` fetches GitHub's public npm advisory API; `Promise.allSettled` ensures one source failing doesn't break the other; advisories map to the same scan shape (`AdvisoryFeedItem`) |

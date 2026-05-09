@@ -217,3 +217,36 @@ Attack pattern: npm_account_hijack_rat_deployment
 ```
 
 Verdict headers: 🔴 BLOCK | 🟡 WARN | 🟢 PASS
+
+---
+
+## GitHub Security Advisory Feed (frontend only)
+
+Used by `Ticker` and `/dashboard` to enrich the community feed with real npm vulnerability data.
+This is a **client-side only** call — it never goes through the Preflight API.
+
+```
+GET https://api.github.com/advisories?type=reviewed&ecosystem=npm&per_page=25
+Headers: Accept: application/vnd.github+json
+
+Rate limit: 60 requests/hour unauthenticated (called once on mount, not polled)
+CORS: enabled — safe to call from browser
+```
+
+Response items are mapped to `AdvisoryFeedItem` (defined in `lib/api.ts`), which shares the
+same shape as `normalizeScan()` output so both can be rendered by `ScanCard` without adaptation:
+
+| Field | Source | Notes |
+|---|---|---|
+| `id` | `a.ghsa_id` | e.g. `GHSA-xxxx-xxxx-xxxx` |
+| `package` | `a.affected[0].package.name` | npm package name |
+| `from` | `a.affected[0].vulnerable_version_range` | parsed via regex |
+| `to` | `a.affected[0].patched_versions` | parsed via regex, fallback `"patched"` |
+| `verdict` | `a.severity` | critical/high → BLOCK; medium/low → WARN |
+| `confidence` | derived | critical: 0.95, high: 0.88, medium: 0.71, low: 0.62 |
+| `duration` | `_deterministicDuration(ghsa_id)` | stable across renders — avoids hydration mismatch |
+| `scannedAt` | `a.updated_at` | used for feed sort order |
+| `advisoryUrl` | `a.html_url` | triggers "View advisory ↗" link in ScanCard expansion |
+| `repo` | `"community"` | static label |
+
+Severity → signal flag count: critical = 4 flags, high = 3, medium/low = 2.

@@ -75,14 +75,16 @@ Security tool for developers. High contrast. Hard corners. No soft shadows. No g
 - Hero: "The axios attack lasted 3 hours." / "70M weekly downloads. Zero tools caught it." / "Preflight would have blocked it in 30 seconds."
 - CTA: "See it live" → /demo
 - Install snippet with copy button (`uses: Javeria-taj/preflight-ai/preflight-action@v1.0.0`)
-- Live community stats (3 counters, polling GET /scans every 10s)
+- Live community stats — 3 StatCounters computed from `getScans(1, 100)`: repos protected (unique), scans completed, threats blocked
 - 4-signal grid
 
 **`/dashboard`**
 - 70% live scan feed / 30% sidebar
-- ScanCard: collapsed 72px, click to expand → signal pills + confidence bar
-- New cards slide in at top in real time
-- Sidebar: Top Threats, Today's Stats, Try demo link
+- Feed = backend scans (polled every 10s via `getScans`) **merged** with GitHub Security Advisory data (fetched once on mount via `getAdvisoryFeed`), combined via `React.useMemo`, sorted by `scannedAt` descending
+- Advisory source: `https://api.github.com/advisories?type=reviewed&ecosystem=npm&per_page=25` — public, CORS-enabled, 60 req/hr unauthenticated; severity maps to BLOCK (critical/high) or WARN (medium/low)
+- ScanCard: collapsed 72px, click to expand → signal pills + confidence bar; advisory items show "View advisory ↗" external link; real scans show "View full scan →" internal link
+- New backend cards slide in at top in real time
+- Sidebar: Top Threats (live), Verdict Distribution histogram, Today's Stats (real counts — SCANS from backend feed, BLOCKED count, IN FEED total, P50 latency computed from actual `duration_ms`), Try demo link
 
 **`/demo` ← Most important for hackathon**
 - Pre-filled locked form: axios 1.7.9 → 1.7.10 + label "The exact attack from March 31, 2026"
