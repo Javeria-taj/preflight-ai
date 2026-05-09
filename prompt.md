@@ -1,531 +1,90 @@
-You are redesigning the complete frontend experience for **Preflight** — an AI-powered behavioral firewall for npm supply-chain attacks.
-
-This project is for:
-
-* NMIT Hacks 2026
-* AI & ML track
-* 48-hour hackathon
-* goal: build the most unforgettable frontend in the competition.
-
-━━━━━━━━━━━━━━━━━━━━
-FULL PRODUCT CONTEXT
-━━━━━━━━━━━━━━━━━━━━
-
-Preflight is NOT:
-
-* a SaaS,
-* a cybersecurity enterprise dashboard,
-* a CVE scanner,
-* a cloud monitoring platform,
-* a generic “AI security” website.
-
-Preflight IS:
-
-> a behavioral pre-execution interceptor that lives inside GitHub pull requests and blocks malicious npm dependency attacks BEFORE execution.
-
-Core flow:
-
-1. Developer opens PR
-2. package-lock.json changes
-3. Preflight GitHub Action triggers
-4. Four independent signal layers analyze the package
-5. Gemini AI synthesizes reasoning
-6. PR gets BLOCKED before merge
-
-This product exists because:
-
-* npm audit,
-* Snyk,
-* and Dependabot
-  missed the real axios attack.
-
-━━━━━━━━━━━━━━━━━━━━
-CURRENT CODEBASE
-━━━━━━━━━━━━━━━━━━━━
-
-The existing frontend already includes:
-
-* React architecture
-* hash-based routing
-* landing page
-* dashboard page
-* demo page
-* scan detail page
-* live ticker system
-* animated terminal
-* confidence bars
-* signal pills
-* GitHub-style flow
-* threat feed
-* live telemetry
-* neo-brutalist styling
-* Space Grotesk + Inter + JetBrains Mono typography
-* dark terminal aesthetic
-* live scan simulations
-* procedural animations
-* AI verdict rendering
-
-But it still feels:
-
-* too template-like,
-* too dashboard-oriented,
-* too safe,
-* too conventional.
-
-━━━━━━━━━━━━━━━━━━━━
-YOUR TASK
-━━━━━━━━━━━━━━━━━━━━
-
-Completely redesign the frontend into a:
-
-* world-class,
-* cinematic,
-* highly technical,
-* emotionally intense,
-* deeply original
-  experience.
-
-The result must feel:
-APPLE keynote polish
-×
-Linear sophistication
-×
-Vercel motion quality
-×
-GitHub-native developer credibility
-×
-high-end intelligence system
-×
-cinematic threat interception UI.
-
-━━━━━━━━━━━━━━━━━━━━
-MOST IMPORTANT DESIGN GOAL
-━━━━━━━━━━━━━━━━━━━━
+The current application has a strong design foundation (Glassmorphism, stark monospace typography, glitch effects) but suffers from heavy reliance on static mock data and disjointed UI states when handling real API responses.
 
-The frontend must create this emotional feeling:
+Phase 1: API & Data Normalization (The Foundation)
+The frontend currently struggles because the backend uses snake_case while the frontend UI components expect camelCase.
 
-> “This system catches attacks that nobody else sees.”
+1. Update lib/api.ts Data Normalizers
 
-Every page should feel:
+Action: Modify normalizeScan to defensively map all API fields to the exact shape expected by ScanCard and ScanDetailPage.
 
-* operational,
-* intelligent,
-* procedural,
-* alive,
-* infrastructural,
-* dangerous,
-* precise.
-
-━━━━━━━━━━━━━━━━━━━━
-VISUAL DIRECTION
-━━━━━━━━━━━━━━━━━━━━
-
-DO NOT:
-
-* use generic SaaS layouts
-* use startup gradients everywhere
-* use cyberpunk overload
-* use neon rainbow effects
-* use generic cards
-* use cookie-cutter dashboards
-* use AI blob illustrations
-* use childish hacker visuals
+Fix flagged missing state: The API's LlmReasoningSignal does not return a flagged boolean. You must derive it: flagged: raw.signals.llm_reasoning.verdict !== 'PASS'.
 
-INSTEAD:
-Design a completely custom visual identity.
+Convert Signals to Array: UI components map over signals. Ensure signalsToArray correctly structures the 4 signals consistently.
 
-Core aesthetic:
+2. Standardize Demo ID
 
-* matte black
-* graphite steel
-* phosphor green
-* deep crimson
-* warning amber
-* terminal monochrome
-* classified infrastructure vibes
-* brutalist editorial typography
-* asymmetric layouts
-* layered tactical UI
-* scanline atmospherics
-* subtle procedural lighting
-* low-noise glass fusion
-* cinematic spacing
-
-The interface should feel like:
-
-* advanced threat intelligence software,
-* a next-generation GitHub-native defense layer,
-* a classified cyber investigation terminal.
+Action: Update DEMO_SCAN_ID in lib/data.ts to the actual MongoDB hex string specified in the contract: 64a7f3e2b1c4d5e6f7a8b9c0.
 
-━━━━━━━━━━━━━━━━━━━━
-TYPOGRAPHY SYSTEM
-━━━━━━━━━━━━━━━━━━━━
-
-Typography should carry the identity.
-
-Use:
-
-* Space Grotesk → display
-* Inter → interface
-* JetBrains Mono → telemetry
-
-Massive headlines.
-Compressed spacing.
-Editorial composition.
-Strong hierarchy.
-Intentional asymmetry.
-
-Headlines should feel historic.
-
-Examples of tone:
-
-* “The next npm attack won’t look malicious.”
-* “Before merge. Before install. Before damage.”
-* “Security tools scan CVEs. We scan intent.”
-
-━━━━━━━━━━━━━━━━━━━━
-MOTION SYSTEM
-━━━━━━━━━━━━━━━━━━━━
-
-Motion quality is CRITICAL.
-
-Animations should feel:
-
-* infrastructural,
-* procedural,
-* reactive,
-* intelligent,
-* low-latency.
-
-DO NOT use:
-
-* generic fade-ins
-* floating startup animations
-* soft SaaS motion
-
-USE:
-
-* scanline sweeps
-* dependency propagation
-* threat pulses
-* signal activation choreography
-* confidence waveform animation
-* graph corruption
-* telemetry synchronization
-* AI reasoning streams
-* procedural stagger timing
-* system-state transitions
-* terminal emergence effects
-* signal convergence visuals
-
-The UI must feel ALIVE.
-
-━━━━━━━━━━━━━━━━━━━━
-LANDING PAGE REDESIGN
-━━━━━━━━━━━━━━━━━━━━
-
-The landing page should become:
-a cinematic narrative experience.
-
-NOT:
-hero + features + pricing.
-
-The flow should feel like:
-watching a cyberattack get intercepted in real time.
-
-Narrative flow:
-
-1. Hero threat emergence
-2. Real axios incident visualization
-3. “Why existing tools failed”
-4. GitHub PR interception
-5. Four-signal engine activation
-6. Gemini reasoning visualization
-7. Community intelligence memory
-8. Live threat ecosystem
-9. One-line install
-10. Final emotional close
-
-━━━━━━━━━━━━━━━━━━━━
-HERO SECTION
-━━━━━━━━━━━━━━━━━━━━
-
-The hero must become iconic.
-
-NOT generic.
-
-Include:
-
-* gigantic typography
-* cinematic layout
-* live GitHub PR visualization
-* dependency graph mutation
-* malicious propagation effects
-* AI reasoning emergence
-* live threat telemetry
-* real-time verdict transitions
-* procedural motion choreography
-
-Possible concepts:
-
-* infected dependency chain
-* malicious propagation map
-* lockfile corruption wave
-* PR status interception
-* attack graph visualization
-* signal synchronization
-* confidence pulse system
-
-The hero should feel:
-massive,
-historic,
-dangerous,
-technically elite.
-
-━━━━━━━━━━━━━━━━━━━━
-DASHBOARD REDESIGN
-━━━━━━━━━━━━━━━━━━━━
-
-Transform the dashboard into:
-a living intelligence system.
-
-NOT cards in a grid.
-
-Ideas:
-
-* streaming threat river
-* anomaly radar
-* scan pulse matrix
-* dependency activity graph
-* confidence waveform
-* package mutation timeline
-* live propagation map
-* intelligence heat layer
-* real-time threat density system
-
-BLOCK verdicts should feel:
-heavy,
-sharp,
-alarming.
-
-PASS verdicts:
-clean,
-calm,
-stable.
-
-WARN:
-uneasy tension.
-
-━━━━━━━━━━━━━━━━━━━━
-DEMO PAGE REDESIGN
-━━━━━━━━━━━━━━━━━━━━
-
-The demo page should feel like:
-a cyberattack movie sequence.
-
-Sequence:
-
-1. GitHub PR opens
-2. Lockfile changes
-3. Signal layers activate progressively
-4. AST scan detects anomalies
-5. Threat score spikes
-6. Maintainer anomaly appears
-7. Gemini correlates evidence
-8. BLOCK verdict slams into interface
-9. npm audit simultaneously says:
-   “0 vulnerabilities”
-
-That juxtaposition should become:
-the signature moment of the product.
-
-━━━━━━━━━━━━━━━━━━━━
-SCAN DETAIL PAGE REDESIGN
-━━━━━━━━━━━━━━━━━━━━
-
-This page should feel like:
-an intelligence forensic workstation.
-
-NOT accordions.
-
-Include:
-
-* attack timeline reconstruction
-* AST visualization
-* maintainer trust decay
-* suspicious code heatmaps
-* signal correlation graph
-* dependency lineage map
-* AI reasoning decomposition
-* confidence factorization
-* package mutation viewer
-* attack fingerprint constellation
-* evidence chain visualization
-
-Gemini reasoning should unfold progressively like:
-an AI analyst thinking in real time.
-
-━━━━━━━━━━━━━━━━━━━━
-UNIQUE CUSTOM UI SYSTEMS
-━━━━━━━━━━━━━━━━━━━━
-
-Invent proprietary visual systems.
-
-Examples:
-
-* threat pulse indicators
-* dependency DNA strips
-* lockfile turbulence graph
-* signal convergence radar
-* package integrity waveform
-* AI reasoning renderer
-* attack fingerprint constellation
-* dependency infection graph
-* verdict emergence animation
-* maintainer anomaly timeline
-* propagation topology map
-* install hook mutation viewer
-
-The UI must feel OWNABLE.
-
-━━━━━━━━━━━━━━━━━━━━
-TECH STACK
-━━━━━━━━━━━━━━━━━━━━
-
-Use:
-
-* React
-* Tailwind or custom CSS
-* Framer Motion
-* GSAP selectively
-* SVG-heavy procedural visuals
-* advanced CSS lighting
-* noise textures
-* layered gradients
-* custom graph rendering
-
-Canvas/WebGL only if meaningful.
-
-Performance must remain:
-
-* fast,
-* smooth,
-* responsive,
-* premium.
-
-━━━━━━━━━━━━━━━━━━━━
-INTERACTION DESIGN
-━━━━━━━━━━━━━━━━━━━━
-
-Every interaction should feel handcrafted.
-
-Examples:
-
-* hover reveals metadata
-* threat lines pulse subtly
-* verdicts animate with weight
-* telemetry updates procedurally
-* AI reasoning materializes progressively
-* dashboard responds to live activity
-* scrolling triggers environmental transitions
-* confidence fills feel diagnostic
-* graph edges activate dynamically
-
-No dead surfaces.
-
-━━━━━━━━━━━━━━━━━━━━
-COLOR SYSTEM
-━━━━━━━━━━━━━━━━━━━━
-
-Mostly monochrome.
-
-Accent colors must be rare and meaningful.
-
-Palette:
-
-* matte black
-* graphite
-* charcoal
-* phosphor green
-* deep crimson
-* amber
-* steel blue
-* cold white
-
-BLOCK states:
-psychologically intense.
-
-PASS states:
-stable precision.
-
-WARN states:
-uncertain tension.
-
-━━━━━━━━━━━━━━━━━━━━
-INFORMATION DENSITY
-━━━━━━━━━━━━━━━━━━━━
-
-This is for developers.
-
-Keep:
-
-* hashes
-* telemetry
-* timing
-* confidence values
-* dependency edges
-* signal metadata
-* AI analysis
-* scan IDs
-* propagation mapping
-* detection lineage
-* package mutation details
-
-The UI should feel technically credible.
-
-━━━━━━━━━━━━━━━━━━━━
-MOST IMPORTANT REQUIREMENT
-━━━━━━━━━━━━━━━━━━━━
-
-The frontend must NOT feel like:
-“a hackathon project.”
-
-It must feel like:
-“the future standard for open-source supply-chain defense.”
-
-Judges should remember:
-
-* the hero,
-* the verdict slam,
-* the npm audit contrast,
-* the AI reasoning sequence,
-* the dependency infection visuals,
-* the motion quality,
-* and the originality of the interface.
-
-━━━━━━━━━━━━━━━━━━━━
-FINAL OUTPUT REQUIRED
-━━━━━━━━━━━━━━━━━━━━
-
-Generate:
-
-* complete redesigned HTML
-* all sections
-* all components
-* all motion systems
-* all interactions
-* all visual systems
-* all responsive behavior
-* all procedural animations
-* all typography hierarchy
-* all layout systems
-* all custom UI inventions
-
-Do NOT simplify.
-Do NOT make it generic.
-Do NOT reuse standard dashboard structures.
-
-Push the frontend quality to an extreme level.
-
-Make this look like:
-the future of AI-powered dependency defense.
+Why: Clicking "View full scan" on the demo result must route to this exact ID so app/scans/[id]/page.tsx can differentiate between the rich pre-seeded demo and a standard live scan.
+
+Phase 2: Flawless Dashboard Flow (app/dashboard/page.tsx)
+The dashboard currently mixes a live feed with static sidebar data, creating a jarring UX.
+
+1. Wire Up "Top Threats"
+
+Action: Fetch getTopThreats(5) on mount. Replace the static TOP_THREATS map in the sidebar with live package data.
+
+UI Polish: Add a skeleton loader for the threats panel. Handle the insufficient_data state gracefully (e.g., "Scanning for baseline...").
+
+2. Live Verdict Distribution (Histogram)
+
+Action: Remove genHisto() static generation.
+
+Logic: Compute the histogram dynamically by reducing the feed array state. Since the feed updates every 10 seconds, the histogram will physically shift as new scans flow in, creating a true "Live Operations" feel.
+
+3. Polling Reliability & Error Boundaries
+
+Action: The current fetchLiveFeed falls back to static data silently if the API fails. Update this to show a degraded state in the LivePulse component (e.g., turn the dot yellow/red and change text from "LIVE" to "RECONNECTING...").
+
+Phase 3: Dynamic Scan Detail Page (app/scans/[id]/page.tsx)
+The detail page is currently hardcoded for the demo scan. Real API scans lack iocs, kill_chain, and model strings, which will cause the UI to crash or look broken.
+
+1. Graceful Degradation for Real Scans
+
+Action: Implement conditional rendering blocks.
+
+Logic: * if (isDemo) -> Render the hardcoded KILL CHAIN and IOCs blocks.
+
+if (!isDemo) -> Hide these sections entirely or replace them with a generic "Execution Trace" derived from the timestamp deltas.
+
+2. Real-time Signal Diff Rendering
+
+Action: Ensure the UI gracefully handles sig.diff being undefined. The real API does not currently send line-by-line diffs for script_diff or ast_scan. Hide the diff-block DOM elements safely to prevent blank gray boxes.
+
+3. Skeleton Loading State
+
+Action: Replace ◐ loading scan data… with a full-page layout skeleton. The header, AI Summary box, and Signal list should pulsate with a var(--bg-surface) background before the data snaps in. This prevents layout shifting (CLS) and feels instantly responsive.
+
+Phase 4: Landing Page & Global Polish
+Fix the copy and ensure global components feel deeply connected to the product's reality.
+
+1. Fix the GitHub Action Configuration (app/page.tsx)
+
+Action: The contract explicitly notes the YAML is wrong.
+
+Fix: Change the INSTALL_YAML snippet in lib/data.ts.
+
+Change uses: preflight-ai/action@v1 to uses: preflight-ai/preflight@v1.0.0
+
+Change fail-on: BLOCK to fail_on_block: true.
+
+Remove comment: true.
+
+2. Live Global Ticker (app/layout.tsx / components/Ticker.tsx)
+
+Action: Currently, Ticker uses static data. Inside Ticker.tsx, write a lightweight useEffect that calls getScans(1, 10) on mount and loops the package names and verdicts. It creates an immediate sense of scale across every page.
+
+3. The Demo Execution Flow (app/demo/page.tsx)
+
+Action: When a user clicks "Run Demo", actually call POST /analyze with { demo: true }.
+
+UX: Tie the 2.7-second artificial API delay to the CSS animation sequence. Let the UI wait on the network tab. When the response hits, snap the verdict card onto the screen. This proves to technical users (who will open the dev tools) that the platform actually works via API.
+
+Summary of the "10/10" UX Enhancements
+To achieve true 10/10 perfection:
+
+No Layout Shift: Reserve height for dynamic components (like the scan feed list).
+
+Micro-interactions: Add Framer Motion (or CSS @starting-style) so that when a new scan hits the Dashboard, it slides down gracefully rather than instantly popping into existence.
+
+Data Integrity: Never show a null or undefined string in the UI. If a PR number isn't present, hide the # symbol. If old_version is null, display [new dependency] instead of undefined -> 1.0.0.

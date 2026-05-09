@@ -723,7 +723,7 @@ h4 { font-size: 14px; font-weight: 600; }
 }
 .stat-value {
   font-family: var(--font-mono); font-weight: 700;
-  font-size: clamp(40px, 5.4vw, 72px); line-height: 1; letter-spacing: -0.04em;
+  font-size: clamp(32px, 4vw, 58px); line-height: 1; letter-spacing: -0.04em;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   display: flex; align-items: baseline; gap: 12px;
