@@ -158,7 +158,7 @@ export default function DashboardPage() {
 
         <div className="demo-cta">
           <span className="demo-tag">▶ TRY IT</span>
-          <h3>Run the axios <span style={{ color: 'var(--accent-block)' }}>attack</span> live</h3>
+          <h3>Run the axios <span className="glitch-attack" data-text="attack">attack</span> live</h3>
           <p>The exact 1.7.9 → 1.7.10 hijack from March 31, 2026. See Preflight catch it in 2.84 seconds.</p>
           <Link className="btn primary full" href="/demo">
             Open demo →

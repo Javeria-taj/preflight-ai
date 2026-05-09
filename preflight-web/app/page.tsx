@@ -23,7 +23,7 @@ export default function LandingPage() {
           <div>
             <div className="eyebrow">incident-report · 2026-03-31 · npm-supply-chain</div>
             <h1 className="hero-headline">
-              The axios <span style={{ color: 'var(--accent-block)' }}>attack</span><br/>lasted <span className="strike" style={{ color: 'var(--accent-block)' }}>3 hours.</span>
+              The axios <span className="glitch-attack" data-text="attack">attack</span><br/>lasted <span className="strike" style={{ color: 'var(--accent-block)' }}>3 hours.</span>
             </h1>
             <p style={{ fontSize: 18, color: 'var(--text-secondary)', maxWidth: 560, lineHeight: 1.65, marginTop: 8 }}>
               70 million weekly downloads. Zero tools caught it. <strong style={{color:'var(--accent-pass)'}}>Preflight would have blocked it in 30 seconds</strong> — before a single line of code executed on a developer's machine.
@@ -35,7 +35,7 @@ export default function LandingPage() {
               <a className="btn ghost large" href="#how">How it works ↓</a>
             </div>
             <div className="hero-stat-row">
-              <div className="hero-stat"><div className="v red">3:00:00</div><div className="l"><span style={{ color: 'var(--accent-block)' }}>attack</span> window</div></div>
+              <div className="hero-stat"><div className="v red">3:00:00</div><div className="l"><span className="glitch-attack" data-text="attack">attack</span> window</div></div>
               <div className="hero-stat"><div className="v">0</div><div className="l">tools caught it</div></div>
               <div className="hero-stat"><div className="v green">00:00:30</div><div className="l">preflight time</div></div>
             </div>
@@ -118,7 +118,7 @@ export default function LandingPage() {
       <section className="section tight">
         <div className="container narrow" style={{ textAlign: 'center', padding: '24px 0' }}>
           <div className="eyebrow" style={{ justifyContent: 'center' }}>three minutes from now</div>
-          <h2 style={{ marginBottom: 16, fontSize: 'clamp(28px, 4vw, 52px)' }}>Run the exact <span style={{ color: 'var(--accent-block)' }}>attack</span>. See the block.</h2>
+          <h2 style={{ marginBottom: 16, fontSize: 'clamp(28px, 4vw, 52px)' }}>Run the exact <span className="glitch-attack" data-text="attack">attack</span>. See the block.</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: 16, marginBottom: 24, maxWidth: '54ch', margin: '0 auto 24px' }}>
             We pre-loaded the actual axios 1.7.9 → 1.7.10 payload from the March 31 incident. Click run. Watch Preflight catch it.
           </p>
