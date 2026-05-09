@@ -28,7 +28,7 @@ function formatComment(pkg: string, oldVer: string | null, newVer: string, resul
     `| Script diff | ${SIGNAL_EMOJI(signals.script_diff.flagged)} | ${signals.script_diff.reason} |`,
     `| AST scan | ${SIGNAL_EMOJI(signals.ast_scan.flagged)} | ${signals.ast_scan.reason} |`,
     `| Maintainer | ${SIGNAL_EMOJI(signals.maintainer.flagged)} | ${signals.maintainer.reason} |`,
-    `| Gemini AI | ${SIGNAL_EMOJI(signals.llm_reasoning.flagged)} | ${signals.llm_reasoning.summary.split(".")[0]} |`,
+    `| Gemini AI | ${SIGNAL_EMOJI(signals.llm_reasoning.verdict !== "PASS")} | ${signals.llm_reasoning.summary.split(".")[0]} |`,
   ];
 
   if (signals.llm_reasoning.attack_pattern) {
