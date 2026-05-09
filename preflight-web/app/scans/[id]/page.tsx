@@ -45,8 +45,21 @@ export default function ScanDetailPage() {
   };
 
   if (loading) return (
-    <div className="scan-detail" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: 13 }}>
-      ◐ loading scan data…
+    <div className="scan-detail">
+      {/* Full skeleton layout — preserves height, no layout shift */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ width: 120, height: 12, background: 'var(--bg-surface)', animation: 'skeletonPulse 1.4s ease-in-out infinite', borderRadius: 2 }} />
+        <div style={{ width: 200, height: 12, background: 'var(--bg-surface)', animation: 'skeletonPulse 1.4s ease-in-out infinite', borderRadius: 2 }} />
+      </div>
+      <div style={{ border: '1px solid var(--border)', padding: 24, background: 'var(--bg-surface)', marginBottom: 16 }}>
+        <div style={{ width: '40%', height: 32, background: 'var(--bg-elevated)', animation: 'skeletonPulse 1.4s ease-in-out infinite', borderRadius: 2, marginBottom: 12 }} />
+        <div style={{ width: '60%', height: 18, background: 'var(--bg-elevated)', animation: 'skeletonPulse 1.4s ease-in-out infinite', borderRadius: 2, marginBottom: 8 }} />
+        <div style={{ width: '80%', height: 12, background: 'var(--bg-elevated)', animation: 'skeletonPulse 1.4s ease-in-out infinite', borderRadius: 2 }} />
+      </div>
+      <div style={{ border: '1px solid var(--border)', padding: 24, background: 'var(--bg-surface)', marginBottom: 16 }}>
+        <div style={{ width: '30%', height: 12, background: 'var(--bg-elevated)', animation: 'skeletonPulse 1.4s ease-in-out infinite', borderRadius: 2, marginBottom: 16 }} />
+        {[1,2,3,4].map(i => <div key={i} style={{ height: 52, background: 'var(--bg-elevated)', animation: 'skeletonPulse 1.4s ease-in-out infinite', borderRadius: 2, marginBottom: 8 }} />)}
+      </div>
     </div>
   );
 
@@ -70,16 +83,16 @@ export default function ScanDetailPage() {
           <div className="meta-row"><VerdictBadge verdict={s.verdict} /><span style={{fontFamily:'var(--font-mono)', fontSize: 12, color: 'var(--accent-block)'}}>● 4 / 4 signals flagged</span></div>
           <div className="pkg">
             <span className="name">{s.package}</span>
-            <span style={{color:'var(--text-secondary)'}}>{s.from}</span>
+            {s.from ? <span style={{color:'var(--text-secondary)'}}>{s.from}</span> : <span style={{color:'var(--text-muted)'}}>[new dependency]</span>}
             <span style={{color:'var(--text-muted)'}}>→</span>
             <span style={{color:'var(--accent-block)'}}>{s.to}</span>
           </div>
           <div className="id-row">
-            <span><span className="key">repo</span> {s.repo}</span>
-            <span><span className="key">pr</span> #{s.pr}</span>
+            {s.repo && <span><span className="key">repo</span> {s.repo}</span>}
+            {s.pr && <span><span className="key">pr</span> #{s.pr}</span>}
             <span><span className="key">scanned</span> {s.scannedAt}</span>
-            <span><span className="key">duration</span> {s.duration}ms</span>
-            <span><span className="key">model</span> {s.model}</span>
+            <span><span className="key">duration</span> {s.duration ?? s.duration_ms ?? '—'}ms</span>
+            {s.model && <span><span className="key">model</span> {s.model}</span>}
           </div>
           <div style={{ display: 'flex', gap: 18, alignItems: 'center', marginTop: 8 }}>
             <div style={{ flex: 1, maxWidth: 360 }}>
@@ -160,12 +173,17 @@ export default function ScanDetailPage() {
               {openIdx === i && (
                 <div className="signal-detail-body">
                   <div className="kv-grid">
-                    {sig.kv.map((kv: any, j: number) => (
+                    {sig.kv ? sig.kv.map((kv: any, j: number) => (
                       <div className="kv" key={j}>
                         <span className="k">{kv.k}</span>
                         <span className={`v ${kv.bad ? 'bad' : ''}`}>{kv.v}</span>
                       </div>
-                    ))}
+                    )) : (
+                      <div className="kv">
+                        <span className="k">STATUS</span>
+                        <span className={`v ${sig.flagged ? 'bad' : ''}`}>{sig.flagged ? 'FLAGGED' : 'CLEAR'}</span>
+                      </div>
+                    )}
                   </div>
                   {sig.diff && (
                     <div className="diff-block">
@@ -197,42 +215,46 @@ export default function ScanDetailPage() {
         </div>
       </div>
 
-      {/* IOCs */}
-      <div>
-        <div className="eyebrow" style={{ marginBottom: 14 }}>indicators of compromise · 4 matches</div>
-        <div className="ioc-list">
-          {s.iocs.map((ioc: any, i: number) => (
-            <div className="ioc-item" key={i}>
-              <span className="ioc-type">{ioc.type}</span>
-              <span className="ioc-val">{ioc.val}</span>
-              <span className="ioc-conf">conf {ioc.conf}</span>
-            </div>
-          ))}
+      {/* IOCs — only rendered for demo scan which has rich static data */}
+      {isDemo && s.iocs && s.iocs.length > 0 && (
+        <div>
+          <div className="eyebrow" style={{ marginBottom: 14 }}>indicators of compromise · {s.iocs.length} matches</div>
+          <div className="ioc-list">
+            {s.iocs.map((ioc: any, i: number) => (
+              <div className="ioc-item" key={i}>
+                <span className="ioc-type">{ioc.type}</span>
+                <span className="ioc-val">{ioc.val}</span>
+                <span className="ioc-conf">conf {ioc.conf}</span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* PR COMMENT */}
-      <div>
-        <div className="eyebrow" style={{ marginBottom: 14 }}>posted to github pr #482</div>
-        <div className="pr-comment">
-          <div className="pr-comment-head">
-            <div className="gh-avatar">P</div>
-            <span className="who">preflight-ai</span>
-            <span>commented · 2026-03-31 14:02 UTC</span>
-            <span style={{ marginLeft: 'auto', color: 'var(--accent-block)', fontWeight: 700 }}>● BLOCK</span>
-          </div>
-          <div className="pr-comment-body">
-            <h4>🔴 Preflight: BLOCK — Dependency Update Intercepted</h4>
-            <div><strong style={{color:'var(--text-primary)'}}>axios</strong> <span className="text-muted">1.7.9 → 1.7.10</span> · Confidence: <span style={{color:'var(--accent-block)', fontWeight: 700}}>94%</span> · <span className="text-muted">2.84s</span></div>
-            <div className="quote">
-              This matches the pattern of a supply-chain hijack. New postinstall hook with outbound network call combined with signing-key rotation after 8 months of inactivity is high-confidence malicious activity.
+      {/* PR COMMENT — only shown for demo scan; real scan comments live on GitHub */}
+      {isDemo && (
+        <div>
+          <div className="eyebrow" style={{ marginBottom: 14 }}>posted to github pr #{s.pr ?? '—'}</div>
+          <div className="pr-comment">
+            <div className="pr-comment-head">
+              <div className="gh-avatar">P</div>
+              <span className="who">preflight-ai</span>
+              <span>commented · {s.scannedAt}</span>
+              <span style={{ marginLeft: 'auto', color: 'var(--accent-block)', fontWeight: 700 }}>● {s.verdict}</span>
             </div>
-            <div style={{ marginTop: 12, color: 'var(--text-secondary)' }}>
-              ❌ Do NOT merge · 🔍 Review manually · 📢 Report to npm security
+            <div className="pr-comment-body">
+              <h4>🔴 Preflight: {s.verdict} — Dependency Update Intercepted</h4>
+              <div><strong style={{color:'var(--text-primary)'}}>{s.package}</strong> <span className="text-muted">{s.from ?? '[new]'} → {s.to}</span> · Confidence: <span style={{color:'var(--accent-block)', fontWeight: 700}}>{Math.round(s.confidence * 100)}%</span> · <span className="text-muted">{s.duration ?? '—'}ms</span></div>
+              <div className="quote">
+                {s.summary}
+              </div>
+              <div style={{ marginTop: 12, color: 'var(--text-secondary)' }}>
+                ❌ Do NOT merge · 🔍 Review manually · 📢 Report to npm security
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

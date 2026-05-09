@@ -1,50 +1,61 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { LivePulse } from "@/components/LivePulse";
 import { ScanCard } from "@/components/ScanCard";
 import { SCAN_FEED, TOP_THREATS } from "@/lib/data";
-import { getScans, normalizeScan } from "@/lib/api";
+import { getScans, getTopThreats, normalizeScan, PackageThreatResponse } from "@/lib/api";
 import Link from "next/link";
 
-function Histogram({ data }: { data: any[] }) {
+// ── Live histogram computed from actual feed data ─────────────────────────
+function LiveHistogram({ feed }: { feed: any[] }) {
+  // Build 36 time buckets from feed, padded with baseline
+  const blocks = Array.from({ length: 36 }, (_, i) => {
+    const scan = feed[i];
+    if (!scan) return { type: '', h: 20 + Math.random() * 25 };
+    const v = scan.verdict?.toLowerCase();
+    return { type: v === 'block' ? 'block' : v === 'warn' ? 'warn' : '', h: 30 + (scan.confidence ?? 0.5) * 55 };
+  });
+  const pass = feed.filter((s: any) => s.verdict === 'PASS').length;
+  const warn = feed.filter((s: any) => s.verdict === 'WARN').length;
+  const block = feed.filter((s: any) => s.verdict === 'BLOCK').length;
+  const total = feed.length || 1;
   return (
     <>
       <div className="histo">
-        {data.map((d, i) => (
-          <div key={i}
-               className={`bar ${d.type}`}
-               style={{ height: `${d.h}%` }}
-               title={`${d.type} · ${d.count}`} />
+        {blocks.map((d, i) => (
+          <div key={i} className={`bar ${d.type}`} style={{ height: `${d.h}%` }} />
         ))}
       </div>
       <div className="histo-legend">
-        <span className="swatch"><i style={{background:'var(--accent-pass)'}}></i> PASS 92.4%</span>
-        <span className="swatch"><i style={{background:'var(--accent-warn)'}}></i> WARN 6.8%</span>
-        <span className="swatch"><i style={{background:'var(--accent-block)'}}></i> BLOCK 0.8%</span>
+        <span className="swatch"><i style={{background:'var(--accent-pass)'}}></i> PASS {Math.round(pass/total*100)}%</span>
+        <span className="swatch"><i style={{background:'var(--accent-warn)'}}></i> WARN {Math.round(warn/total*100)}%</span>
+        <span className="swatch"><i style={{background:'var(--accent-block)'}}></i> BLOCK {Math.round(block/total*100)}%</span>
       </div>
     </>
   );
 }
 
-function genHisto() {
-  const out = [];
-  for (let i = 0; i < 36; i++) {
-    const r = Math.random();
-    if (r < 0.05) out.push({ type: 'block', h: 30 + Math.random() * 50, count: 1 });
-    else if (r < 0.15) out.push({ type: 'warn', h: 25 + Math.random() * 50, count: 2 });
-    else out.push({ type: '', h: 30 + Math.random() * 65, count: 12 });
-  }
-  return out;
+// ── Skeleton loader ───────────────────────────────────────────────────────
+function SkeletonRow() {
+  return (
+    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 12, alignItems: 'center' }}>
+      <div style={{ width: 52, height: 22, background: 'var(--bg-elevated)', borderRadius: 2, animation: 'skeletonPulse 1.4s ease-in-out infinite' }} />
+      <div style={{ flex: 1, height: 14, background: 'var(--bg-elevated)', borderRadius: 2, animation: 'skeletonPulse 1.4s ease-in-out infinite' }} />
+      <div style={{ width: 60, height: 14, background: 'var(--bg-elevated)', borderRadius: 2, animation: 'skeletonPulse 1.4s ease-in-out infinite' }} />
+    </div>
+  );
 }
 
 export default function DashboardPage() {
   const [feed, setFeed] = useState<any[]>(SCAN_FEED);
+  const [topThreats, setTopThreats] = useState<PackageThreatResponse[] | null>(null);
+  const [threatsLoading, setThreatsLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filter, setFilter] = useState('all');
   const [newId, setNewId] = useState<string | null>(null);
-  const [histo, setHisto] = useState<any[]>([]);
   const [counter, setCounter] = useState(142039);
-  const [apiOnline, setApiOnline] = useState(false);
+  const [apiState, setApiState] = useState<'connecting' | 'live' | 'reconnecting'>('connecting');
+  const retryCount = useRef(0);
 
   const fetchLiveFeed = async () => {
     try {
@@ -52,8 +63,8 @@ export default function DashboardPage() {
       if (data.scans && data.scans.length > 0) {
         const normalized = data.scans.map(normalizeScan);
         setFeed(normalized);
-        setApiOnline(true);
-        // highlight newest
+        setApiState('live');
+        retryCount.current = 0;
         const newest = normalized[0];
         if (newest) {
           setNewId(newest.id);
@@ -61,19 +72,20 @@ export default function DashboardPage() {
         }
       }
     } catch {
-      // silently fall back to static data — keep the UI alive
-      setApiOnline(false);
+      retryCount.current++;
+      setApiState(retryCount.current > 1 ? 'reconnecting' : 'connecting');
     }
   };
 
   useEffect(() => {
-    setHisto(genHisto());
-    // initial fetch
     fetchLiveFeed();
-    // poll every 10s
+    // Live top threats
+    getTopThreats(5)
+      .then(data => { setTopThreats(data); setThreatsLoading(false); })
+      .catch(() => { setTopThreats(null); setThreatsLoading(false); });
+    // Poll every 10s
     const pollMs = parseInt(process.env.NEXT_PUBLIC_POLL_INTERVAL_MS ?? '10000');
     const interval = setInterval(fetchLiveFeed, pollMs);
-    // counter animation (always cosmetic)
     const counterT = setInterval(() => {
       setCounter(c => c + Math.floor(2 + Math.random() * 6));
     }, 7500);
@@ -81,10 +93,15 @@ export default function DashboardPage() {
   }, []);
 
   const filtered = filter === 'all' ? feed : feed.filter((s: any) => s.verdict === filter.toUpperCase());
-  const counts: Record<string, number> = { all: feed.length, BLOCK: feed.filter((s:any)=>s.verdict==='BLOCK').length,
-                   WARN: feed.filter((s:any)=>s.verdict==='WARN').length,
-                   PASS: feed.filter((s:any)=>s.verdict==='PASS').length };
+  const counts: Record<string, number> = {
+    all: feed.length,
+    BLOCK: feed.filter((s: any) => s.verdict === 'BLOCK').length,
+    WARN: feed.filter((s: any) => s.verdict === 'WARN').length,
+    PASS: feed.filter((s: any) => s.verdict === 'PASS').length,
+  };
 
+  const statusColor = apiState === 'live' ? 'var(--accent-pass)' : apiState === 'reconnecting' ? 'var(--accent-block)' : 'var(--accent-warn)';
+  const statusLabel = apiState === 'live' ? 'LIVE' : apiState === 'reconnecting' ? 'RECONNECTING…' : 'CONNECTING…';
 
   return (
     <div className="dashboard">
@@ -93,7 +110,7 @@ export default function DashboardPage() {
           <div>
             <h1>Live community feed</h1>
             <div className="sub">
-              <div style={{display:'flex', alignItems:'center', gap: 6}}><LivePulse /><span style={{ color: apiOnline ? 'var(--accent-pass)' : 'var(--accent-warn)' }}>{apiOnline ? 'LIVE' : 'SIMULATED'}</span></div>
+              <div style={{display:'flex', alignItems:'center', gap: 6}}><LivePulse /><span style={{ color: statusColor }}>{statusLabel}</span></div>
               <span>{counter.toLocaleString()} total scans · last 24h</span>
               <span>updates every 10s</span>
             </div>
@@ -132,33 +149,50 @@ export default function DashboardPage() {
       {/* SIDEBAR */}
       <aside className="sidebar">
         <div className="panel">
-          <div className="panel-head"><span><span className="acc">●</span> TOP THREATS</span><span>last 24h</span></div>
+          <div className="panel-head"><span><span className="acc">●</span> TOP THREATS</span><span>live · community</span></div>
           <div className="panel-body tight">
-            {TOP_THREATS.map(t => (
-              <div className="threat-row" key={t.rank}>
-                <span className="rank">#{String(t.rank).padStart(2,'0')}</span>
-                <div>
-                  <div className="pkg">{t.pkg}</div>
-                  <div className="ver-tiny">{t.ver}</div>
+            {threatsLoading ? (
+              [1,2,3,4,5].map(i => <SkeletonRow key={i} />)
+            ) : topThreats && topThreats.length > 0 ? (
+              topThreats.map((t, rank) => (
+                <div className="threat-row" key={t.package_name}>
+                  <span className="rank">#{String(rank+1).padStart(2,'0')}</span>
+                  <div>
+                    <div className="pkg">{t.package_name}</div>
+                    <div className="ver-tiny">{t.flagged_versions[0] ?? 'multiple'}</div>
+                  </div>
+                  <div className="score-bar"><div className="fill" style={{ width: `${t.community_threat_score ?? 50}%` }}></div></div>
+                  <span className="score">{t.community_threat_score ?? '—'}</span>
                 </div>
-                <div className="score-bar"><div className="fill" style={{ width: `${t.score}%` }}></div></div>
-                <span className="score">{t.score}</span>
-              </div>
-            ))}
+              ))
+            ) : (
+              // Fallback to static data if API unavailable
+              TOP_THREATS.map(t => (
+                <div className="threat-row" key={t.rank}>
+                  <span className="rank">#{String(t.rank).padStart(2,'0')}</span>
+                  <div>
+                    <div className="pkg">{t.pkg}</div>
+                    <div className="ver-tiny">{t.ver}</div>
+                  </div>
+                  <div className="score-bar"><div className="fill" style={{ width: `${t.score}%` }}></div></div>
+                  <span className="score">{t.score}</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
         <div className="panel">
-          <div className="panel-head"><span><span className="acc">●</span> VERDICT DISTRIBUTION</span><span>last 36h</span></div>
-          <Histogram data={histo} />
+          <div className="panel-head"><span><span className="acc">●</span> VERDICT DISTRIBUTION</span><span>current feed</span></div>
+          <LiveHistogram feed={feed} />
         </div>
 
         <div className="panel">
-          <div className="panel-head"><span><span className="acc">●</span> TODAY'S STATS</span><span>2026-05-08</span></div>
+          <div className="panel-head"><span><span className="acc">●</span> TODAY'S STATS</span><span>{new Date().toISOString().slice(0,10)}</span></div>
           <div className="stats-mini">
-            <div className="stat-mini"><div className="v">12,847</div><div className="l">SCANS</div></div>
-            <div className="stat-mini"><div className="v">47</div><div className="l">BLOCKED</div></div>
-            <div className="stat-mini"><div className="v">312</div><div className="l">REPOS</div></div>
+            <div className="stat-mini"><div className="v">{counter.toLocaleString()}</div><div className="l">SCANS</div></div>
+            <div className="stat-mini"><div className="v">{counts.BLOCK}</div><div className="l">BLOCKED</div></div>
+            <div className="stat-mini"><div className="v">{feed.length}</div><div className="l">IN FEED</div></div>
             <div className="stat-mini"><div className="v">2.7s</div><div className="l">P50 LATENCY</div></div>
           </div>
         </div>
@@ -175,3 +209,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

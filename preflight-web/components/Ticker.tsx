@@ -1,9 +1,31 @@
-import React from "react";
+"use client";
+import React, { useState, useEffect } from "react";
 import { LivePulse } from "./LivePulse";
 import { TICKER_FEED } from "../lib/data";
+import { getScans } from "../lib/api";
 
 export function Ticker() {
-  const items = [...TICKER_FEED, ...TICKER_FEED];
+  const [items, setItems] = useState(
+    [...TICKER_FEED, ...TICKER_FEED].map(it => ({
+      v: it.v, pkg: it.pkg, repo: it.repo, t: it.t
+    }))
+  );
+
+  useEffect(() => {
+    getScans(1, 10).then(data => {
+      if (data.scans && data.scans.length > 0) {
+        const live = data.scans.map(s => ({
+          v: s.verdict,
+          pkg: `${s.package_name}@${s.new_version}`,
+          repo: s.repo ?? 'community',
+          t: new Date(s.scanned_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }));
+        const doubled = [...live, ...live];
+        setItems(doubled);
+      }
+    }).catch(() => {}); // silently keep static data
+  }, []);
+
   return (
     <div className="ticker">
       <div className="ticker-label">

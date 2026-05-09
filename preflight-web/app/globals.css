@@ -1467,11 +1467,17 @@ h4 { font-size: 14px; font-weight: 600; }
    =================================================================== */
 
 .scan-card.new-arrival {
-  animation: slideIn 500ms var(--ease-out);
+  animation: slideIn 420ms var(--ease-out);
 }
 @keyframes slideIn {
-  from { transform: translateY(-12px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from { transform: translateY(-16px); opacity: 0; clip-path: inset(0 0 100% 0); }
+  to   { transform: translateY(0);     opacity: 1; clip-path: inset(0 0 0% 0); }
+}
+
+/* Skeleton pulse — used for loading states */
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 /* divider with text */
