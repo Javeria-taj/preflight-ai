@@ -4,6 +4,7 @@ import { HeroTerminal } from "@/components/HeroTerminal";
 import { InstallSnippet } from "@/components/InstallSnippet";
 import { StatCounter } from "@/components/StatCounter";
 import { Footer } from "@/components/Footer";
+import { Magnetic } from "@/components/Magnetic";
 import { HOW_STEPS, SIGNAL_INFO, INSTALL_YAML } from "@/lib/data";
 import Link from "next/link";
 
@@ -28,14 +29,16 @@ export default function LandingPage() {
             <p style={{ fontSize: 18, color: 'var(--text-secondary)', maxWidth: 560, lineHeight: 1.65, marginTop: 8 }}>
               70 million weekly downloads. Zero tools caught it. <strong style={{color:'var(--accent-pass)'}}>Preflight would have blocked it in 30 seconds</strong> — before a single line of code executed on a developer's machine.
             </p>
-            <div style={{ display: 'flex', gap: 12, marginTop: 28 }}>
-              <Link className="btn primary large" href="/demo">
-                ▶ Run live demo<span className="kbd">D</span>
-              </Link>
+            <div style={{ display: 'flex', gap: 12, marginTop: 28, alignItems: 'center' }}>
+              <Magnetic>
+                <Link className="btn primary large" href="/demo">
+                  ▶ Run live demo<span className="kbd">D</span>
+                </Link>
+              </Magnetic>
               <a className="btn ghost large" href="#how">How it works ↓</a>
             </div>
             <div className="hero-stat-row">
-              <div className="hero-stat"><div className="v red">3:00:00</div><div className="l"><span className="glitch-attack" data-text="attack">attack</span> window</div></div>
+              <div className="hero-stat"><div className="v red">3:00:00</div><div className="l"><span className="glitch-attack" data-text="attack" data-glow-target="block">attack</span> window</div></div>
               <div className="hero-stat"><div className="v">0</div><div className="l">tools caught it</div></div>
               <div className="hero-stat"><div className="v green">00:00:30</div><div className="l">preflight time</div></div>
             </div>

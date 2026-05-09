@@ -1585,3 +1585,105 @@ h4 { font-size: 14px; font-weight: 600; }
   .verdict-head { grid-template-columns: 1fr; }
   .verdict-badge.large { font-size: 36px; padding: 14px 20px; }
 }
+
+/* ===================================================================
+   GRID GLOW — global interactive background overlay
+   =================================================================== */
+
+.grid-glow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  /* CSS grid lines using var(--border) */
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 48px 48px;
+  /* Grid lines drift softly with the mouse — updated via rAF lerp in GridGlow.tsx */
+  background-position: var(--bx, 0px) var(--by, 0px);
+  opacity: 0.4;
+  /* Radial gradient mask tracking mouse position (snaps instantly) */
+  -webkit-mask-image: radial-gradient(
+    700px circle at var(--gx, 50vw) var(--gy, 50vh),
+    black 0%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    700px circle at var(--gx, 50vw) var(--gy, 50vh),
+    black 0%,
+    transparent 100%
+  );
+}
+
+/* Separate colored glow orb on top */
+.grid-glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    300px circle at var(--gx, 50vw) var(--gy, 50vh),
+    var(--glow-color, rgba(120,180,255,0.08)),
+    transparent 80%
+  );
+  transition: background 0.3s ease;
+}
+
+/* ===================================================================
+   SCAN CARD SPOTLIGHT BORDER
+   =================================================================== */
+
+.scan-card {
+  position: relative; /* ensure stacking context */
+}
+
+/* Spotlight highlight glides along the border */
+.scan-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+  /* Radial glow from mouse position, masked to border thickness */
+  background: radial-gradient(
+    250px circle at var(--mouse-x, -200px) var(--mouse-y, -200px),
+    rgba(255, 255, 255, 0.10),
+    transparent 70%
+  );
+  /* Only show the 1px border area via border-image / outline trick */
+  border: 1px solid transparent;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  padding: 1px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.scan-card:hover::before {
+  opacity: 1;
+}
+
+/* ===================================================================
+   MAGNETIC BUTTON WRAPPER
+   =================================================================== */
+
+.magnetic-wrap {
+  display: inline-flex;
+  position: relative;
+}
+
+.magnetic-inner {
+  display: inline-flex;
+  will-change: transform;
+  /* CSS fallback: if JS hasn't run yet, no displacement */
+  transform: translate(0, 0);
+  transition: none; /* rAF lerp handles smoothing, not CSS transition */
+}

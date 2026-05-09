@@ -1,90 +1,53 @@
-The current application has a strong design foundation (Glassmorphism, stark monospace typography, glitch effects) but suffers from heavy reliance on static mock data and disjointed UI states when handling real API responses.
+Role Context: You are an elite frontend UI/UX engineer specializing in high-performance, 60fps micro-interactions using Next.js, React, and raw CSS.
 
-Phase 1: API & Data Normalization (The Foundation)
-The frontend currently struggles because the backend uses snake_case while the frontend UI components expect camelCase.
+Mission: We are elevating the preflight-web frontend to a 10/10 tier by implementing a suite of cursor-tracking, context-aware interactive elements. Performance is the absolute highest priority. Do not use React useState to track (x, y) coordinates for rendering, as this will cause frame drops. You must use refs and CSS variables (--x, --y).
 
-1. Update lib/api.ts Data Normalizers
+Please implement the following four features globally across the application.
 
-Action: Modify normalizeScan to defensively map all API fields to the exact shape expected by ScanCard and ScanDetailPage.
+1. Global Interactive Grid Glow (components/GridGlow.tsx & app/layout.tsx)
+Create a new component GridGlow.tsx that renders a background grid masked by a radial gradient tracking the mouse.
 
-Fix flagged missing state: The API's LlmReasoningSignal does not return a flagged boolean. You must derive it: flagged: raw.signals.llm_reasoning.verdict !== 'PASS'.
+Attach a mousemove listener to the window to update --x and --y CSS properties on the container ref.
 
-Convert Signals to Array: UI components map over signals. Ensure signalsToArray correctly structures the 4 signals consistently.
+The grid should use our existing var(--border) CSS variable.
 
-2. Standardize Demo ID
+Action: Add this component to app/layout.tsx inside the #root or app-shell div so it persists globally across the landing page and dashboard. Ensure it has pointer-events: none and z-index: 0 (or underneath the main content).
 
-Action: Update DEMO_SCAN_ID in lib/data.ts to the actual MongoDB hex string specified in the contract: 64a7f3e2b1c4d5e6f7a8b9c0.
+2. Context-Aware Glow Colors
+The global grid glow should change color dynamically based on what the user is hovering over.
 
-Why: Clicking "View full scan" on the demo result must route to this exact ID so app/scans/[id]/page.tsx can differentiate between the rich pre-seeded demo and a standard live scan.
+Default: Subtle cyan or cool gray (var(--border) or a faint rgba).
 
-Phase 2: Flawless Dashboard Flow (app/dashboard/page.tsx)
-The dashboard currently mixes a live feed with static sidebar data, creating a jarring UX.
+Hovering a "PASS" element: Shift the glow to var(--accent-pass).
 
-1. Wire Up "Top Threats"
+Hovering a "BLOCK" element / "attack" text: Shift the glow to var(--accent-block).
 
-Action: Fetch getTopThreats(5) on mount. Replace the static TOP_THREATS map in the sidebar with live package data.
+Implementation Strategy: Use a data-glow-target="pass|block" attribute on specific DOM elements. In the GridGlow's mousemove event, use e.target.closest('[data-glow-target]') to detect if the cursor is over a specific context. Update a --glow-color CSS variable dynamically. Add a CSS transition: --glow-color 0.3s ease to make the color shift smooth.
 
-UI Polish: Add a skeleton loader for the threats panel. Handle the insufficient_data state gracefully (e.g., "Scanning for baseline...").
+3. Spotlight Cards (components/ScanCard.tsx)
+Upgrade the ScanCard component to feature a glassmorphism "spotlight border" effect.
 
-2. Live Verdict Distribution (Histogram)
+When the mouse moves near or inside a ScanCard, a subtle highlight should glide along its border.
 
-Action: Remove genHisto() static generation.
+Implementation Strategy: Apply the same CSS variable trick directly within the ScanCard component or via a generic wrapper. Use an ::before pseudo-element with a background of radial-gradient(250px circle at var(--mouse-x) var(--mouse-y), rgba(255,255,255,0.1), transparent) masked to just the 1px border area.
 
-Logic: Compute the histogram dynamically by reducing the feed array state. Since the feed updates every 10 seconds, the histogram will physically shift as new scans flow in, creating a true "Live Operations" feel.
+Ensure you pass data-glow-target={scan.verdict.toLowerCase()} to the root of the ScanCard so the global GridGlow syncs with the card's verdict!
 
-3. Polling Reliability & Error Boundaries
+4. Magnetic Elements (components/MagneticButton.tsx)
+Create a wrapper component (e.g., Magnetic.tsx) that can wrap our primary CTA buttons (like ▶ Run live demo in app/page.tsx and app/dashboard/page.tsx).
 
-Action: The current fetchLiveFeed falls back to static data silently if the API fails. Update this to show a degraded state in the LivePulse component (e.g., turn the dot yellow/red and change text from "LIVE" to "RECONNECTING...").
+Behavior: When the cursor enters a designated bounding box around the button (e.g., a 50px threshold), the button should gently translate towards the cursor (transform: translate(x, y)).
 
-Phase 3: Dynamic Scan Detail Page (app/scans/[id]/page.tsx)
-The detail page is currently hardcoded for the demo scan. Real API scans lack iocs, kill_chain, and model strings, which will cause the UI to crash or look broken.
+Use gsap (if installed) or raw CSS transform with requestAnimationFrame/lerp for a buttery smooth magnetic pull and release. The pull should be subtle (max 15-20px displacement) so it feels tactile but not difficult to click.
 
-1. Graceful Degradation for Real Scans
+Execution Rules:
 
-Action: Implement conditional rendering blocks.
+Zero Layout Shift: These changes must be purely visual layers (pointer-events-none, absolute/fixed positioning, pseudo-elements).
 
-Logic: * if (isDemo) -> Render the hardcoded KILL CHAIN and IOCs blocks.
+No useState for Mouse tracking: Only use .style.setProperty('--var', ...) in useEffect listeners.
 
-if (!isDemo) -> Hide these sections entirely or replace them with a generic "Execution Trace" derived from the timestamp deltas.
+Graceful Degradation: Ensure standard CSS fallbacks exist if JavaScript is slow to initialize.
 
-2. Real-time Signal Diff Rendering
+Review the Existing Code: Read app/layout.tsx, components/ScanCard.tsx, and app/globals.css before writing to ensure your CSS aligns with our existing stark/glassmorphic Neobrutalist theme.
 
-Action: Ensure the UI gracefully handles sig.diff being undefined. The real API does not currently send line-by-line diffs for script_diff or ast_scan. Hide the diff-block DOM elements safely to prevent blank gray boxes.
-
-3. Skeleton Loading State
-
-Action: Replace ◐ loading scan data… with a full-page layout skeleton. The header, AI Summary box, and Signal list should pulsate with a var(--bg-surface) background before the data snaps in. This prevents layout shifting (CLS) and feels instantly responsive.
-
-Phase 4: Landing Page & Global Polish
-Fix the copy and ensure global components feel deeply connected to the product's reality.
-
-1. Fix the GitHub Action Configuration (app/page.tsx)
-
-Action: The contract explicitly notes the YAML is wrong.
-
-Fix: Change the INSTALL_YAML snippet in lib/data.ts.
-
-Change uses: preflight-ai/action@v1 to uses: preflight-ai/preflight@v1.0.0
-
-Change fail-on: BLOCK to fail_on_block: true.
-
-Remove comment: true.
-
-2. Live Global Ticker (app/layout.tsx / components/Ticker.tsx)
-
-Action: Currently, Ticker uses static data. Inside Ticker.tsx, write a lightweight useEffect that calls getScans(1, 10) on mount and loops the package names and verdicts. It creates an immediate sense of scale across every page.
-
-3. The Demo Execution Flow (app/demo/page.tsx)
-
-Action: When a user clicks "Run Demo", actually call POST /analyze with { demo: true }.
-
-UX: Tie the 2.7-second artificial API delay to the CSS animation sequence. Let the UI wait on the network tab. When the response hits, snap the verdict card onto the screen. This proves to technical users (who will open the dev tools) that the platform actually works via API.
-
-Summary of the "10/10" UX Enhancements
-To achieve true 10/10 perfection:
-
-No Layout Shift: Reserve height for dynamic components (like the scan feed list).
-
-Micro-interactions: Add Framer Motion (or CSS @starting-style) so that when a new scan hits the Dashboard, it slides down gracefully rather than instantly popping into existence.
-
-Data Integrity: Never show a null or undefined string in the UI. If a PR number isn't present, hide the # symbol. If old_version is null, display [new dependency] instead of undefined -> 1.0.0.
+Please output the specific file changes and code required to implement these 4 steps.
