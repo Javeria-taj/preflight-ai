@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 from app.db.client import get_db
 
@@ -46,10 +46,137 @@ _DEMO_SCAN = {
         },
     },
     "duration_ms": 2840,
-    # scanned_at = now so TTL index (30d) never expires this during the hackathon
     "scanned_at": datetime.now(timezone.utc),
     "created_at": datetime.now(timezone.utc),
 }
+
+
+def _community_scan(
+    pkg: str, old_v: str | None, new_v: str,
+    verdict: str, confidence: float,
+    repo: str | None, pr: int | None,
+    minutes_ago: int, duration_ms: int,
+    sd_flagged: bool, sd_new: list, sd_changed: list, sd_reason: str,
+    ast_flagged: bool, ast_patterns: list, ast_sev: str, ast_reason: str,
+    mt_flagged: bool, mt_risk: int, mt_key: bool, mt_days: int, mt_reason: str,
+    llm_summary: str, attack_pattern: str | None,
+) -> dict:
+    ts = datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
+    return {
+        "_id": ObjectId(),
+        "package_name": pkg,
+        "old_version": old_v,
+        "new_version": new_v,
+        "verdict": verdict,
+        "confidence": confidence,
+        "repo": repo,
+        "pr_number": pr,
+        "is_demo": False,
+        "signals": {
+            "script_diff": {"flagged": sd_flagged, "new_hooks": sd_new, "changed_hooks": sd_changed, "reason": sd_reason},
+            "ast_scan": {"flagged": ast_flagged, "patterns": ast_patterns, "severity": ast_sev, "reason": ast_reason},
+            "maintainer": {"flagged": mt_flagged, "risk_score": mt_risk, "key_changed": mt_key, "inactive_days": mt_days, "reason": mt_reason},
+            "llm_reasoning": {"verdict": verdict, "confidence": confidence, "summary": llm_summary, "attack_pattern": attack_pattern},
+        },
+        "duration_ms": duration_ms,
+        "scanned_at": ts,
+        "created_at": ts,
+    }
+
+
+def _build_community_scans() -> list[dict]:
+    _p = "No suspicious patterns detected"
+    _a = "Active maintainer, provenance intact"
+    _s = "No install hook changes detected"
+    def _pass(pkg, old_v, new_v, repo, pr, mins, dur, summary):
+        return _community_scan(
+            pkg, old_v, new_v, "PASS", 0.95, repo, pr, mins, dur,
+            False, [], [], _s,
+            False, [], "none", _p,
+            False, 8, False, 4, _a,
+            summary, None,
+        )
+
+    return [
+        # ── BLOCKs ────────────────────────────────────────────────────────
+        _community_scan(
+            "event-stream", "3.3.5", "3.3.6", "BLOCK", 0.91,
+            "startup-xyz/backend", 147, 6, 3240,
+            True, ["postinstall"], [], "New postinstall hook added in 3.3.6",
+            True, ["outbound_https", "process_env_exfiltration"], "high",
+            "Postinstall reads GITHUB_TOKEN and sends to external domain",
+            False, 22, False, 14, "Maintainer active, no key rotation",
+            "New postinstall hook exfiltrates CI environment variables to a remote server. "
+            "Classic credential harvesting pattern targeting CI/CD pipelines.",
+            "env_exfiltration_credential_theft",
+        ),
+        _community_scan(
+            "ua-parser-js", "0.7.29", "0.7.30", "BLOCK", 0.93,
+            "fintech/api-gateway", 83, 38, 2950,
+            True, ["preinstall"], [], "New preinstall hook added",
+            True, ["process_spawn", "outbound_https"], "high",
+            "Preinstall spawns shell command and connects to cryptomining pool",
+            True, 85, True, 197, "Signing key rotated 4 hours before release after 197 days inactive",
+            "All three signals confirm supply chain hijack: new preinstall hook spawns a "
+            "cryptominer connected to a known mining pool. Key rotated hours before release.",
+            "npm_account_hijack_cryptominer",
+        ),
+
+        # ── WARNs ─────────────────────────────────────────────────────────
+        _community_scan(
+            "node-ipc", "10.1.0", "10.1.1", "WARN", 0.72,
+            "open-source/toolkit", 29, 52, 2180,
+            False, [], [], _s,
+            False, [], "none", _p,
+            True, 48, False, 0, "New maintainer added to package 3 days ago",
+            "New maintainer added recently. No code anomalies detected but ownership transfer "
+            "warrants manual review before merging.",
+            None,
+        ),
+        _community_scan(
+            "colors", "1.4.0", "1.4.1", "WARN", 0.68,
+            "acme-corp/payments-api", 204, 78, 1870,
+            True, [], ["postinstall"], "Existing postinstall hook body changed in 1.4.1",
+            False, [], "none", _p,
+            False, 15, False, 12, _a,
+            "Install hook modified but no outbound network calls detected. "
+            "Recommend reviewing the hook diff before merging.",
+            None,
+        ),
+        _community_scan(
+            "decode-uri-component", "0.2.1", "0.2.2", "WARN", 0.64,
+            "enterprise/monorepo", 501, 112, 2340,
+            False, [], [], _s,
+            True, ["outbound_https"], "medium",
+            "Existing install hook now includes an outbound HTTPS call not present in 0.2.1",
+            False, 20, False, 8, _a,
+            "Outbound network call added to existing hook. Pattern is ambiguous — could be "
+            "telemetry or malicious. Manual review required before merge.",
+            None,
+        ),
+
+        # ── PASSes ────────────────────────────────────────────────────────
+        _pass("lodash", "4.17.20", "4.17.21", "acme-corp/payments-api", 205, 5, 1420,
+              "No suspicious behavior detected in this patch release."),
+        _pass("express", "4.18.1", "4.18.2", "startup-xyz/backend", 148, 14, 1680,
+              "Routine minor release with no install hooks and active maintainer."),
+        _pass("react", "18.2.0", "18.3.0", "saas-app/server", 92, 27, 2100,
+              "Minor release. No install hooks present. Well-established package."),
+        _pass("typescript", "5.2.2", "5.3.0", "dev-team/microservices", 317, 45, 1940,
+              "No suspicious behavior. Typescript compiler releases are consistently clean."),
+        _pass("webpack", "5.88.0", "5.89.0", "enterprise/monorepo", 502, 68, 2560,
+              "No install hook changes. Provenance attestation intact."),
+        _pass("axios", "1.7.7", "1.7.9", "acme-corp/payments-api", 206, 95, 1810,
+              "Clean upgrade path. No hooks, no anomalies. Safe to merge."),
+        _pass("next", "14.0.1", "14.0.2", "saas-app/server", 93, 130, 2200,
+              "Patch release with no install hooks. Well-maintained package."),
+        _pass("uuid", "9.0.0", "9.0.1", "fintech/api-gateway", 84, 175, 1350,
+              "No install hooks present. Straightforward patch release."),
+        _pass("chalk", "5.3.0", "5.3.1", "open-source/toolkit", 30, 230, 1190,
+              "No suspicious behavior detected. Active maintainer, provenance intact."),
+        _pass("@types/node", "20.0.0", "20.11.0", "dev-team/microservices", 318, 310, 2080,
+              "Type definition package with no install hooks. Clean upgrade."),
+    ]
 
 
 async def seed_demo_data() -> None:
@@ -57,6 +184,14 @@ async def seed_demo_data() -> None:
     existing = await db.scans.find_one({"_id": ObjectId(DEMO_SCAN_ID)})
     if not existing:
         await db.scans.insert_one(_DEMO_SCAN)
+
+
+async def seed_community_scans() -> None:
+    db = get_db()
+    count = await db.scans.count_documents({"is_demo": {"$ne": True}})
+    if count >= 5:
+        return
+    await db.scans.insert_many(_build_community_scans())
 
 
 def _serialize(doc: dict) -> dict:

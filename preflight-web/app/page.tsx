@@ -11,8 +11,9 @@ import Link from "next/link";
 
 export default function LandingPage() {
   const [activeStep, setActiveStep] = useState(0);
-  const [scanCount, setScanCount] = useState(142039);
-  const [blockCount, setBlockCount] = useState(1247);
+  const [scanCount, setScanCount] = useState(0);
+  const [blockCount, setBlockCount] = useState(0);
+  const [repoCount, setRepoCount] = useState(0);
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -22,20 +23,18 @@ export default function LandingPage() {
   }, []);
 
   useEffect(() => {
-    // Use real API scan count to calibrate the seed — don't stack on top
-    getScans(1, 20).then(data => {
+    getScans(1, 100).then(data => {
       if (data.scans && data.scans.length > 0) {
         const blocks = data.scans.filter((s: { verdict: string }) => s.verdict === 'BLOCK').length;
-        const warns  = data.scans.filter((s: { verdict: string }) => s.verdict === 'WARN').length;
-        // Nudge block count based on real ratio from the live feed
-        if (blocks > 0) setBlockCount(c => c + blocks * 3);
-        if (warns  > 0) setScanCount(c => c + data.scans.length * 2);
+        const repos = new Set(
+          data.scans.map((s: { repo: string | null }) => s.repo).filter(Boolean)
+        ).size;
+        setScanCount(data.scans.length);
+        setBlockCount(blocks);
+        setRepoCount(repos);
       }
     }).catch(() => {});
-    // Slowly increment counter to simulate ongoing activity
-    const t = setInterval(() => {
-      setScanCount(c => c + Math.floor(2 + Math.random() * 5));
-    }, 8000);
+    const t = setInterval(() => setScanCount(c => c + 1), 15000);
     return () => clearInterval(t);
   }, []);
 
@@ -79,11 +78,11 @@ export default function LandingPage() {
           <InstallSnippet code={INSTALL_YAML} language="yaml" filePath=".github/workflows/preflight.yml" />
           <div className="divider-text">community threat intelligence — last 24h</div>
           <div className="stats-shell">
-            <StatCounter value={2847} label="Repos protected" accent="" delta="+312 this week"
+            <StatCounter value={repoCount} label="Repos protected" accent=""
               sparkData={[40,55,30,62,48,70,55,88,72,90,75,98]} />
             <StatCounter value={scanCount} label="Scans completed" accent=""
               sparkData={[55,40,65,52,70,58,82,66,90,75,85,92]} />
-            <StatCounter value={blockCount} label="Threats blocked" accent="block" delta="+47 today"
+            <StatCounter value={blockCount} label="Threats blocked" accent="block"
               sparkData={[20,28,18,42,30,55,40,60,38,72,50,80]} />
           </div>
         </div>
