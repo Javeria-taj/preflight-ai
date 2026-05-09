@@ -48,7 +48,8 @@ function SkeletonRow() {
 }
 
 export default function DashboardPage() {
-  const [feed, setFeed] = useState<any[]>(SCAN_FEED);
+  const [feed, setFeed] = useState<any[]>([]);
+  const [feedLoading, setFeedLoading] = useState(true);
   const [topThreats, setTopThreats] = useState<PackageThreatResponse[] | null>(null);
   const [threatsLoading, setThreatsLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -71,10 +72,18 @@ export default function DashboardPage() {
           setNewId(newest.id);
           setTimeout(() => setNewId(null), 600);
         }
+      } else {
+        // API responded but no scans yet — fall back to mock
+        setFeed(SCAN_FEED);
+        setApiState('live');
       }
     } catch {
       retryCount.current++;
       setApiState(retryCount.current > 1 ? 'reconnecting' : 'connecting');
+      // Only fall back to mock on first failure so we don't flash stale data
+      if (feed.length === 0) setFeed(SCAN_FEED);
+    } finally {
+      setFeedLoading(false);
     }
   };
 
@@ -135,15 +144,19 @@ export default function DashboardPage() {
           <div className="live-meta"><LivePulse /><span>auto-refreshing</span></div>
         </div>
         <div className="scan-feed">
-          {filtered.map((scan: any) => (
-            <ScanCard
-              key={scan.id}
-              scan={scan}
-              expanded={expandedId === scan.id}
-              onToggle={() => setExpandedId(expandedId === scan.id ? null : scan.id)}
-              isNew={newId === scan.id}
-            />
-          ))}
+          {feedLoading && feed.length === 0 ? (
+            [1,2,3,4,5].map(i => <SkeletonRow key={i} />)
+          ) : (
+            filtered.map((scan: any) => (
+              <ScanCard
+                key={scan.id}
+                scan={scan}
+                expanded={expandedId === scan.id}
+                onToggle={() => setExpandedId(expandedId === scan.id ? null : scan.id)}
+                isNew={newId === scan.id}
+              />
+            ))
+          )}
         </div>
       </div>
 

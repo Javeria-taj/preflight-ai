@@ -6,15 +6,29 @@ import { StatCounter } from "@/components/StatCounter";
 import { Footer } from "@/components/Footer";
 import { Magnetic } from "@/components/Magnetic";
 import { HOW_STEPS, SIGNAL_INFO, INSTALL_YAML } from "@/lib/data";
+import { getScans } from "@/lib/api";
 import Link from "next/link";
 
 export default function LandingPage() {
   const [activeStep, setActiveStep] = useState(0);
+  const [scanCount, setScanCount] = useState(142039);
+  const [blockCount, setBlockCount] = useState(1247);
+
   useEffect(() => {
     const t = setInterval(() => {
       setActiveStep(s => (s + 1) % HOW_STEPS.length);
     }, 3500);
     return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    getScans(1, 20).then(data => {
+      if (data.scans && data.scans.length > 0) {
+        setScanCount(c => c + data.scans.length);
+        const blocks = data.scans.filter(s => s.verdict === 'BLOCK').length;
+        setBlockCount(c => c + blocks);
+      }
+    }).catch(() => {});
   }, []);
 
   return (
@@ -59,9 +73,9 @@ export default function LandingPage() {
           <div className="stats-shell">
             <StatCounter value={2847} label="Repos protected" accent="" delta="+312 this week"
               sparkData={[40,55,30,62,48,70,55,88,72,90,75,98]} />
-            <StatCounter value={142039} label="Scans completed" accent=""
+            <StatCounter value={scanCount} label="Scans completed" accent=""
               sparkData={[55,40,65,52,70,58,82,66,90,75,85,92]} />
-            <StatCounter value={1247} label="Threats blocked" accent="block" delta="+47 today"
+            <StatCounter value={blockCount} label="Threats blocked" accent="block" delta="+47 today"
               sparkData={[20,28,18,42,30,55,40,60,38,72,50,80]} />
           </div>
         </div>

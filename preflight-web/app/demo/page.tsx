@@ -14,6 +14,7 @@ export default function DemoPage() {
   const [traceShown, setTraceShown] = useState(0);
   const [progress, setProgress] = useState(0);
   const [apiResult, setApiResult] = useState<AnalyzeResponse | null>(null);
+  const [apiError, setApiError] = useState(false);
   const traceRef = useRef<HTMLDivElement>(null);
 
   const reset = () => {
@@ -24,14 +25,14 @@ export default function DemoPage() {
 
   const start = () => {
     if (running) return;
-    setRunning(true); setDone(false); setApiResult(null);
+    setRunning(true); setDone(false); setApiResult(null); setApiError(false);
     setStatuses(['pending','pending','pending','pending']);
     setTraceShown(0); setProgress(0);
 
     // Fire real API call in parallel with animation
     runAnalysis({ package_name: 'axios', old_version: '1.7.9', new_version: '1.7.10', demo: true })
       .then(res => setApiResult(res))
-      .catch(() => {}); // fall back to static display
+      .catch(() => setApiError(true));
 
     const order = [0, 1, 2, 3];
     order.forEach((idx, i) => {
@@ -158,6 +159,11 @@ export default function DemoPage() {
 
       {done && (
         <div className="verdict-card" style={{ animation: 'signalIn 500ms var(--ease-out)' }}>
+          {apiError && !apiResult && (
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent-warn)', padding: '4px 10px', border: '1px solid var(--accent-warn)', display: 'inline-block', marginBottom: 12 }}>
+              ⚠ offline mode · using cached result
+            </div>
+          )}
           <div className="verdict-head">
             <div className="badge-col">
               <VerdictBadge verdict={apiResult?.verdict ?? 'BLOCK'} large />

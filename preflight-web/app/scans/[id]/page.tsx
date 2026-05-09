@@ -4,8 +4,52 @@ import { useParams } from "next/navigation";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { ConfidenceBar } from "@/components/ConfidenceBar";
 import { SCAN_DETAIL_AXIOS, DEMO_SCAN_ID } from "@/lib/data";
-import { getScan, normalizeScan, ScanDetail } from "@/lib/api";
+import { getScan, normalizeScan, ScanDetail, SignalsResponse } from "@/lib/api";
 import Link from "next/link";
+
+function buildLiveSignals(signals: SignalsResponse) {
+  const { script_diff: sd, ast_scan: ast, maintainer: mt, llm_reasoning: llm } = signals;
+  return [
+    {
+      num: '01', icon: 'SD', name: 'Script Diff', flagged: sd.flagged,
+      kv: [
+        { k: 'STATUS', v: sd.flagged ? 'FLAGGED' : 'CLEAR', bad: sd.flagged },
+        { k: 'NEW HOOKS', v: sd.new_hooks.length ? sd.new_hooks.join(', ') : '(none)' },
+        { k: 'CHANGED HOOKS', v: sd.changed_hooks.length ? sd.changed_hooks.join(', ') : '(none)' },
+        { k: 'REASON', v: sd.reason },
+      ],
+    },
+    {
+      num: '02', icon: 'AS', name: 'AST Scan', flagged: ast.flagged,
+      kv: [
+        { k: 'STATUS', v: ast.flagged ? 'FLAGGED' : 'CLEAR', bad: ast.flagged },
+        { k: 'PATTERNS', v: ast.patterns.length ? ast.patterns.join(' · ') : '(none)' },
+        { k: 'SEVERITY', v: ast.severity.toUpperCase(), bad: ast.severity === 'high' },
+        { k: 'REASON', v: ast.reason },
+      ],
+    },
+    {
+      num: '03', icon: 'MT', name: 'Maintainer', flagged: mt.flagged,
+      kv: [
+        { k: 'STATUS', v: mt.flagged ? 'FLAGGED' : 'CLEAR', bad: mt.flagged },
+        { k: 'RISK SCORE', v: `${mt.risk_score} / 100`, bad: mt.risk_score > 60 },
+        { k: 'KEY CHANGE', v: mt.key_changed ? 'yes' : 'no', bad: mt.key_changed },
+        { k: 'INACTIVITY', v: `${mt.inactive_days} days`, bad: mt.inactive_days > 90 },
+        { k: 'REASON', v: mt.reason },
+      ],
+    },
+    {
+      num: '04', icon: 'AI', name: 'Gemini AI', flagged: llm.verdict !== 'PASS',
+      kv: [
+        { k: 'STATUS', v: llm.verdict !== 'PASS' ? 'FLAGGED' : 'CLEAR', bad: llm.verdict !== 'PASS' },
+        { k: 'VERDICT', v: llm.verdict },
+        { k: 'CONFIDENCE', v: llm.confidence.toFixed(2), bad: llm.verdict === 'BLOCK' },
+        { k: 'ATTACK PATTERN', v: llm.attack_pattern ?? '(none)', bad: !!llm.attack_pattern },
+      ],
+      explanation: llm.summary,
+    },
+  ];
+}
 
 export default function ScanDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -29,10 +73,7 @@ export default function ScanDetailPage() {
     attackPattern: rawScan!.signals.llm_reasoning.attack_pattern,
     model: 'gemini-2.5-pro',
     iocs: [],
-    signals: SCAN_DETAIL_AXIOS.signals.map((sig: any, i: number) => {
-      const rawSigs = [rawScan!.signals.script_diff, rawScan!.signals.ast_scan, rawScan!.signals.maintainer, rawScan!.signals.llm_reasoning] as any[];
-      return { ...sig, flagged: i < 3 ? rawSigs[i].flagged : rawScan!.signals.llm_reasoning.verdict !== 'PASS' };
-    }),
+    signals: buildLiveSignals(rawScan!.signals),
   };
 
   const [openIdx, setOpenIdx] = useState(0);
@@ -80,7 +121,7 @@ export default function ScanDetailPage() {
       {/* HEADER */}
       <div className="scan-detail-head">
         <div className="meta">
-          <div className="meta-row"><VerdictBadge verdict={s.verdict} /><span style={{fontFamily:'var(--font-mono)', fontSize: 12, color: 'var(--accent-block)'}}>● 4 / 4 signals flagged</span></div>
+          <div className="meta-row"><VerdictBadge verdict={s.verdict} /><span style={{fontFamily:'var(--font-mono)', fontSize: 12, color: 'var(--accent-block)'}}>● {s.signals.filter((sig: any) => sig.flagged).length} / 4 signals flagged</span></div>
           <div className="pkg">
             <span className="name">{s.package}</span>
             {s.from ? <span style={{color:'var(--text-secondary)'}}>{s.from}</span> : <span style={{color:'var(--text-muted)'}}>[new dependency]</span>}
