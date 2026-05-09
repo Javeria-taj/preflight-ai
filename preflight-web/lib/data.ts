@@ -12,7 +12,7 @@ export const TICKER_FEED = [
 ];
 
 export const SCAN_FEED = [
-  { id: 'scn_a1f7e2', verdict: 'BLOCK', package: 'axios', from: '1.7.9', to: '1.7.10',
+  { id: '64a7f3e2b1c4d5e6f7a8b9c0', verdict: 'BLOCK', package: 'axios', from: '1.7.9', to: '1.7.10',
     repo: 'acme-corp/payments-api', pr: 482, time: '2s ago', confidence: 0.94, duration: 2840,
     signals: [{name:'Script Diff',flagged:true},{name:'AST Scan',flagged:true},{name:'Maintainer',flagged:true},{name:'Gemini AI',flagged:true}],
     summary: 'Patch release introduces a new postinstall hook that spawns a child process and exfiltrates environment variables. Maintainer key changed 6h ago after 238 days of inactivity. Pattern matches npm account hijack.' },
@@ -90,10 +90,10 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: preflight-ai/action@v1
+      - uses: preflight-ai/preflight@v1.0.0
         with:
-          fail-on: BLOCK
-          comment: true`;
+          lockfile: package-lock.json
+          fail_on_block: true`;
 
 export const DEMO_SIGNALS = [
   { num: '01', icon: 'SD', name: 'Script Diff', reason: 'New postinstall hook added: ./_postinstall.js' },
@@ -119,8 +119,10 @@ export const TRACE_LINES = [
   { ts: '00:02.84', lvl: 'ok',   msg: 'verdict=BLOCK · confidence=0.94 · written to MongoDB' },
 ];
 
+export const DEMO_SCAN_ID = '64a7f3e2b1c4d5e6f7a8b9c0';
+
 export const SCAN_DETAIL_AXIOS = {
-  id: 'scn_a1f7e2',
+  id: '64a7f3e2b1c4d5e6f7a8b9c0',
   package: 'axios', from: '1.7.9', to: '1.7.10',
   verdict: 'BLOCK', confidence: 0.94, duration: 2840,
   scannedAt: '2026-03-31 14:02:11 UTC',

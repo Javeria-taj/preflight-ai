@@ -3,7 +3,8 @@ import React, { useState, useRef } from "react";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { SignalRow } from "@/components/SignalRow";
 import { ConfidenceBar } from "@/components/ConfidenceBar";
-import { DEMO_SIGNALS, TRACE_LINES } from "@/lib/data";
+import { DEMO_SIGNALS, TRACE_LINES, DEMO_SCAN_ID } from "@/lib/data";
+import { runAnalysis, AnalyzeResponse } from "@/lib/api";
 import Link from "next/link";
 
 export default function DemoPage() {
@@ -12,19 +13,25 @@ export default function DemoPage() {
   const [statuses, setStatuses] = useState(['pending','pending','pending','pending']);
   const [traceShown, setTraceShown] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [apiResult, setApiResult] = useState<AnalyzeResponse | null>(null);
   const traceRef = useRef<HTMLDivElement>(null);
 
   const reset = () => {
     setRunning(false); setDone(false);
     setStatuses(['pending','pending','pending','pending']);
-    setTraceShown(0); setProgress(0);
+    setTraceShown(0); setProgress(0); setApiResult(null);
   };
 
   const start = () => {
     if (running) return;
-    setRunning(true); setDone(false);
+    setRunning(true); setDone(false); setApiResult(null);
     setStatuses(['pending','pending','pending','pending']);
     setTraceShown(0); setProgress(0);
+
+    // Fire real API call in parallel with animation
+    runAnalysis({ package_name: 'axios', old_version: '1.7.9', new_version: '1.7.10', demo: true })
+      .then(res => setApiResult(res))
+      .catch(() => {}); // fall back to static display
 
     const order = [0, 1, 2, 3];
     order.forEach((idx, i) => {
@@ -153,31 +160,31 @@ export default function DemoPage() {
         <div className="verdict-card" style={{ animation: 'signalIn 500ms var(--ease-out)' }}>
           <div className="verdict-head">
             <div className="badge-col">
-              <VerdictBadge verdict="BLOCK" large />
+              <VerdictBadge verdict={apiResult?.verdict ?? 'BLOCK'} large />
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: 6 }}>
-                ID scn_a1f7e2 · {(2.84).toFixed(2)}s · gemini-2.5-pro
+                {apiResult ? `ID ${apiResult.scan_id}` : `ID ${DEMO_SCAN_ID}`} · {((apiResult?.duration_ms ?? 2840)/1000).toFixed(2)}s · gemini-2.5-pro
               </div>
             </div>
             <div className="conf-wrap">
-              <div className="conf-num"><span>CONFIDENCE</span><span>94%</span></div>
-              <ConfidenceBar confidence={0.94} animate={true} />
+              <div className="conf-num"><span>CONFIDENCE</span><span>{apiResult ? `${Math.round(apiResult.confidence * 100)}%` : '94%'}</span></div>
+              <ConfidenceBar confidence={apiResult?.confidence ?? 0.94} animate={true} />
               <div className="id-row">
-                <span>4 / 4 signals flagged</span>
+                <span>{apiResult ? `scan_id: ${apiResult.scan_id}` : '4 / 4 signals flagged'}</span>
                 <span>fail-safe rule: 3+ signals → always BLOCK</span>
               </div>
             </div>
           </div>
           <div className="verdict-body">
             <div className="verdict-summary">
-              <strong>Do not merge.</strong> The 1.7.10 release introduces a new <span style={{color:'var(--accent-warn)', fontFamily:'var(--font-mono)'}}>postinstall</span> hook that spawns a child process and opens an outbound HTTPS connection to a recently-registered domain. The publisher's signing key was rotated approximately six hours before this release, after 238 days of inactivity. The combined signal pattern is a near-perfect match for the <em style={{ color: 'var(--text-primary)', fontStyle: 'normal' }}>npm account hijack + RAT deployment</em> family.
+              <strong>Do not merge.</strong> {apiResult?.signals.llm_reasoning.summary ?? 'The 1.7.10 release introduces a new postinstall hook that spawns a child process and opens an outbound HTTPS connection to a recently-registered domain. The publisher\'s signing key was rotated approximately six hours before this release, after 238 days of inactivity. The combined signal pattern is a near-perfect match for the npm account hijack + RAT deployment family.'}
             </div>
             <div className="attack-pattern">
               <span className="key">attack_pattern:</span>
-              <span className="val">npm_account_hijack_rat_deployment</span>
+              <span className="val">{apiResult?.signals.llm_reasoning.attack_pattern ?? 'npm_account_hijack_rat_deployment'}</span>
             </div>
           </div>
           <div className="verdict-ftr">
-            <Link className="btn primary" href="/scans/scn_a1f7e2">
+            <Link className="btn primary" href={`/scans/${apiResult?.scan_id ?? DEMO_SCAN_ID}`}>
               ↗ Full scan detail
             </Link>
             <button className="btn ghost" onClick={reset}>↺ Run again</button>
@@ -220,7 +227,7 @@ export default function DemoPage() {
                 ❌ Do NOT merge · 🔍 Review manually · 📢 Report to npm security
               </div>
               <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-muted)' }}>
-                <a>Preflight</a> · <Link href="/scans/scn_a1f7e2">View full analysis →</Link>
+                <a>Preflight</a> · <Link href={`/scans/${apiResult?.scan_id ?? DEMO_SCAN_ID}`}>View full analysis →</Link>
               </div>
             </div>
           </div>

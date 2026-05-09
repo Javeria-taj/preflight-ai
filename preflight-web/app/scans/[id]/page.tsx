@@ -1,12 +1,40 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { ConfidenceBar } from "@/components/ConfidenceBar";
-import { SCAN_DETAIL_AXIOS } from "@/lib/data";
+import { SCAN_DETAIL_AXIOS, DEMO_SCAN_ID } from "@/lib/data";
+import { getScan, normalizeScan, ScanDetail } from "@/lib/api";
 import Link from "next/link";
 
 export default function ScanDetailPage() {
-  const s = SCAN_DETAIL_AXIOS;
+  const { id } = useParams<{ id: string }>();
+  const [rawScan, setRawScan] = useState<ScanDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    // For the demo scan ID, skip API call — use static data which includes iocs + kill-chain
+    if (!id || id === DEMO_SCAN_ID) { setLoading(false); return; }
+    getScan(id)
+      .then(data => { setRawScan(data); setLoading(false); })
+      .catch(() => { setError(true); setLoading(false); });
+  }, [id]);
+
+  // Use static data for demo scan, or normalize live data for real scans
+  const isDemo = !id || id === DEMO_SCAN_ID || !rawScan;
+  const s: any = isDemo ? SCAN_DETAIL_AXIOS : {
+    ...normalizeScan(rawScan!),
+    scannedAt: rawScan!.scanned_at,
+    attackPattern: rawScan!.signals.llm_reasoning.attack_pattern,
+    model: 'gemini-2.5-pro',
+    iocs: [],
+    signals: SCAN_DETAIL_AXIOS.signals.map((sig: any, i: number) => {
+      const rawSigs = [rawScan!.signals.script_diff, rawScan!.signals.ast_scan, rawScan!.signals.maintainer, rawScan!.signals.llm_reasoning] as any[];
+      return { ...sig, flagged: i < 3 ? rawSigs[i].flagged : rawScan!.signals.llm_reasoning.verdict !== 'PASS' };
+    }),
+  };
+
   const [openIdx, setOpenIdx] = useState(0);
   const [showToast, setShowToast] = useState(false);
 
@@ -15,6 +43,18 @@ export default function ScanDetailPage() {
     setShowToast(true);
     setTimeout(() => setShowToast(false), 3000);
   };
+
+  if (loading) return (
+    <div className="scan-detail" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: 13 }}>
+      ◐ loading scan data…
+    </div>
+  );
+
+  if (error) return (
+    <div className="scan-detail" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', fontFamily: 'var(--font-mono)', color: 'var(--accent-block)', fontSize: 13 }}>
+      ✕ scan not found · <Link href="/dashboard" style={{ color: 'var(--text-secondary)', marginLeft: 8 }}>← back to feed</Link>
+    </div>
+  );
 
   return (
     <div className="scan-detail">
@@ -101,7 +141,7 @@ export default function ScanDetailPage() {
       <div>
         <div className="eyebrow" style={{ marginBottom: 14 }}>signals · click to expand</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {s.signals.map((sig, i) => (
+          {s.signals.map((sig: any, i: number) => (
             <div key={i} className={`signal-detail ${sig.flagged ? 'flagged' : 'clear'} ${openIdx === i ? 'open' : ''}`}>
               <div className="signal-detail-head" onClick={() => setOpenIdx(openIdx === i ? -1 : i)}>
                 <span className="num">{sig.num}</span>
@@ -120,7 +160,7 @@ export default function ScanDetailPage() {
               {openIdx === i && (
                 <div className="signal-detail-body">
                   <div className="kv-grid">
-                    {sig.kv.map((kv, j) => (
+                    {sig.kv.map((kv: any, j: number) => (
                       <div className="kv" key={j}>
                         <span className="k">{kv.k}</span>
                         <span className={`v ${kv.bad ? 'bad' : ''}`}>{kv.v}</span>
@@ -131,9 +171,9 @@ export default function ScanDetailPage() {
                     <div className="diff-block">
                       <div className="diff-block-head">
                         <span>{sig.num === '01' ? 'package.json' : './_postinstall.js'} · diff</span>
-                        <span style={{color: 'var(--accent-block)'}}>+{sig.diff.filter(d=>d.type==='add').length} added</span>
+                        <span style={{color: 'var(--accent-block)'}}>+{sig.diff.filter((d: any) => d.type==='add').length} added</span>
                       </div>
-                      {sig.diff.map((d, k) => (
+                      {sig.diff.map((d: any, k: number) => (
                         <div key={k} className={`diff-row ${d.type} ${d.flag ? 'flag' : ''}`}>
                           <span className="lineno">{d.n}</span>
                           <span className="sign">{d.sign}</span>
@@ -161,7 +201,7 @@ export default function ScanDetailPage() {
       <div>
         <div className="eyebrow" style={{ marginBottom: 14 }}>indicators of compromise · 4 matches</div>
         <div className="ioc-list">
-          {s.iocs.map((ioc, i) => (
+          {s.iocs.map((ioc: any, i: number) => (
             <div className="ioc-item" key={i}>
               <span className="ioc-type">{ioc.type}</span>
               <span className="ioc-val">{ioc.val}</span>

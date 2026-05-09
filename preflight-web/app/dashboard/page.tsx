@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { LivePulse } from "@/components/LivePulse";
 import { ScanCard } from "@/components/ScanCard";
 import { SCAN_FEED, TOP_THREATS } from "@/lib/data";
+import { getScans, normalizeScan } from "@/lib/api";
 import Link from "next/link";
 
 function Histogram({ data }: { data: any[] }) {
@@ -37,47 +38,53 @@ function genHisto() {
 }
 
 export default function DashboardPage() {
-  const [feed, setFeed] = useState(SCAN_FEED);
+  const [feed, setFeed] = useState<any[]>(SCAN_FEED);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filter, setFilter] = useState('all');
   const [newId, setNewId] = useState<string | null>(null);
   const [histo, setHisto] = useState<any[]>([]);
   const [counter, setCounter] = useState(142039);
+  const [apiOnline, setApiOnline] = useState(false);
+
+  const fetchLiveFeed = async () => {
+    try {
+      const data = await getScans(1, 20);
+      if (data.scans && data.scans.length > 0) {
+        const normalized = data.scans.map(normalizeScan);
+        setFeed(normalized);
+        setApiOnline(true);
+        // highlight newest
+        const newest = normalized[0];
+        if (newest) {
+          setNewId(newest.id);
+          setTimeout(() => setNewId(null), 600);
+        }
+      }
+    } catch {
+      // silently fall back to static data — keep the UI alive
+      setApiOnline(false);
+    }
+  };
 
   useEffect(() => {
     setHisto(genHisto());
-    let i = 0;
-    const fakeNew = [
-      { id: `scn_n${Math.random().toString(36).slice(2,8)}`, verdict: 'PASS', package: 'next', from: '14.2.3', to: '14.2.4',
-        repo: 'orbit/marketing-site', pr: 99, time: 'just now', confidence: 0.14, duration: 1380,
-        signals: [{name:'Script Diff',flagged:false},{name:'AST Scan',flagged:false},{name:'Maintainer',flagged:false},{name:'Gemini AI',flagged:false}],
-        summary: 'Routine release.' },
-      { id: `scn_n${Math.random().toString(36).slice(2,8)}`, verdict: 'WARN', package: 'sharp', from: '0.33.2', to: '0.33.3',
-        repo: 'media/img-pipeline', pr: 56, time: 'just now', confidence: 0.62, duration: 2010,
-        signals: [{name:'Script Diff',flagged:true},{name:'AST Scan',flagged:false},{name:'Maintainer',flagged:false},{name:'Gemini AI',flagged:true}],
-        summary: 'Native binary download URL changed. Worth review.' },
-      { id: `scn_n${Math.random().toString(36).slice(2,8)}`, verdict: 'PASS', package: 'tailwindcss', from: '3.4.3', to: '3.4.4',
-        repo: 'acme-corp/dashboard', pr: 2902, time: 'just now', confidence: 0.06, duration: 980,
-        signals: [{name:'Script Diff',flagged:false},{name:'AST Scan',flagged:false},{name:'Maintainer',flagged:false},{name:'Gemini AI',flagged:false}],
-        summary: 'Patch only.' },
-    ];
-    const t = setInterval(() => {
-      const incoming = fakeNew[i % fakeNew.length];
-      const id = `scn_n${Math.random().toString(36).slice(2,8)}`;
-      const next = { ...incoming, id };
-      setFeed(prev => [next, ...prev].slice(0, 12));
-      setNewId(id);
+    // initial fetch
+    fetchLiveFeed();
+    // poll every 10s
+    const pollMs = parseInt(process.env.NEXT_PUBLIC_POLL_INTERVAL_MS ?? '10000');
+    const interval = setInterval(fetchLiveFeed, pollMs);
+    // counter animation (always cosmetic)
+    const counterT = setInterval(() => {
       setCounter(c => c + Math.floor(2 + Math.random() * 6));
-      setTimeout(() => setNewId(null), 600);
-      i++;
     }, 7500);
-    return () => clearInterval(t);
+    return () => { clearInterval(interval); clearInterval(counterT); };
   }, []);
 
-  const filtered = filter === 'all' ? feed : feed.filter(s => s.verdict === filter.toUpperCase());
-  const counts: Record<string, number> = { all: feed.length, BLOCK: feed.filter(s=>s.verdict==='BLOCK').length,
-                   WARN: feed.filter(s=>s.verdict==='WARN').length,
-                   PASS: feed.filter(s=>s.verdict==='PASS').length };
+  const filtered = filter === 'all' ? feed : feed.filter((s: any) => s.verdict === filter.toUpperCase());
+  const counts: Record<string, number> = { all: feed.length, BLOCK: feed.filter((s:any)=>s.verdict==='BLOCK').length,
+                   WARN: feed.filter((s:any)=>s.verdict==='WARN').length,
+                   PASS: feed.filter((s:any)=>s.verdict==='PASS').length };
+
 
   return (
     <div className="dashboard">
@@ -86,9 +93,9 @@ export default function DashboardPage() {
           <div>
             <h1>Live community feed</h1>
             <div className="sub">
-              <div style={{display:'flex', alignItems:'center', gap: 6}}><LivePulse /><span style={{ color: 'var(--accent-pass)' }}>STREAMING</span></div>
+              <div style={{display:'flex', alignItems:'center', gap: 6}}><LivePulse /><span style={{ color: apiOnline ? 'var(--accent-pass)' : 'var(--accent-warn)' }}>{apiOnline ? 'LIVE' : 'SIMULATED'}</span></div>
               <span>{counter.toLocaleString()} total scans · last 24h</span>
-              <span>updates every 7.5s</span>
+              <span>updates every 10s</span>
             </div>
           </div>
           <Link className="btn ghost" href="/">↩ back to landing</Link>
