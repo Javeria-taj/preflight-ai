@@ -27,11 +27,15 @@ router = APIRouter()
 # Artificial per-signal delays for demo mode (ms) — makes UI animation feel real
 _DEMO_SIGNAL_DELAYS = [0.5, 0.7, 0.6, 0.9]
 
+# Auto-trigger demo for the axios attack scenario — 1.7.10 doesn't exist on real npm
+_DEMO_AUTO_TRIGGER = {("axios", "1.7.9", "1.7.10")}
+
 
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(req: AnalyzeRequest):
     # Demo mode — return pre-seeded result with staggered artificial delays
-    if req.demo:
+    is_demo = req.demo or (req.package_name, req.old_version, req.new_version) in _DEMO_AUTO_TRIGGER
+    if is_demo:
         for delay in _DEMO_SIGNAL_DELAYS:
             await asyncio.sleep(delay)
         scan = await scans_db.get_scan(DEMO_SCAN_ID)
