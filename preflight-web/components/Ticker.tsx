@@ -4,26 +4,29 @@ import { LivePulse } from "./LivePulse";
 import { TICKER_FEED } from "../lib/data";
 import { getScans } from "../lib/api";
 
+type TickerItem = { v: string; pkg: string; repo: string; t: string };
+
+const STATIC: TickerItem[] = TICKER_FEED.map(it => ({
+  v: it.v, pkg: it.pkg, repo: it.repo, t: it.t,
+}));
+
 export function Ticker() {
-  const [items, setItems] = useState(
-    [...TICKER_FEED, ...TICKER_FEED].map(it => ({
-      v: it.v, pkg: it.pkg, repo: it.repo, t: it.t
-    }))
-  );
+  const [items, setItems] = useState<TickerItem[]>([...STATIC, ...STATIC]);
 
   useEffect(() => {
-    getScans(1, 10).then(data => {
-      if (data.scans && data.scans.length > 0) {
-        const live = data.scans.map(s => ({
-          v: s.verdict,
-          pkg: `${s.package_name}@${s.new_version}`,
-          repo: s.repo ?? 'community',
-          t: new Date(s.scanned_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        }));
-        const doubled = [...live, ...live];
-        setItems(doubled);
-      }
-    }).catch(() => {}); // silently keep static data
+    getScans(1, 12)
+      .then(data => {
+        if (data.scans && data.scans.length > 0) {
+          const live: TickerItem[] = data.scans.map(s => ({
+            v:    s.verdict,
+            pkg:  `${s.package_name}@${s.new_version}`,
+            repo: s.repo ?? 'community',
+            t:    new Date(s.scanned_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          }));
+          setItems([...live, ...live]);
+        }
+      })
+      .catch(() => {}); // keep static data on any failure
   }, []);
 
   return (

@@ -86,14 +86,21 @@ on:
       - 'package-lock.json'
       - 'pnpm-lock.yaml'
       - 'yarn.lock'
+permissions:
+  pull-requests: write
+  statuses: write
+  contents: read
 jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: preflight-ai/preflight@v1.0.0
+      - uses: actions/checkout@v4
+      - uses: Javeria-taj/preflight-ai/preflight-action@v1.0.0
         with:
           lockfile: package-lock.json
-          fail_on_block: true`;
+          fail_on_block: true
+        env:
+          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}`;
 
 export const DEMO_SIGNALS = [
   { num: '01', icon: 'SD', name: 'Script Diff', reason: 'New postinstall hook added: ./_postinstall.js' },
