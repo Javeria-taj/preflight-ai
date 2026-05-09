@@ -55,12 +55,12 @@ export default function DemoPage() {
       <div className="demo-attack-banner">
         <div className="glyph">⚠</div>
         <div className="meta">
-          <strong>THE EXACT ATTACK FROM MARCH 31, 2026</strong>
+          <strong>THE EXACT <span style={{ color: 'var(--accent-block)' }}>ATTACK</span> FROM MARCH 31, 2026</strong>
           North Korean state actors hijacked the axios npm account. 70M weekly downloads.
           The malicious package was live for 3 hours — npm audit, Snyk, and Dependabot all missed it.
         </div>
         <div className="clock">
-          attack window<br/>
+          <span style={{ color: 'var(--accent-block)' }}>attack</span> window<br/>
           <span className="v">03:00:00</span>
         </div>
       </div>
@@ -214,7 +214,7 @@ export default function DemoPage() {
                 </tbody>
               </table>
               <div style={{ marginTop: 14 }}>
-                <span style={{ color: 'var(--text-muted)' }}>Attack pattern:</span> <code style={{ color: 'var(--accent-block)' }}>npm_account_hijack_rat_deployment</code>
+                <span style={{ color: 'var(--accent-block)' }}>Attack pattern:</span> <code style={{ color: 'var(--accent-block)' }}>npm_account_hijack_rat_deployment</code>
               </div>
               <div style={{ marginTop: 12, color: 'var(--text-secondary)' }}>
                 ❌ Do NOT merge · 🔍 Review manually · 📢 Report to npm security

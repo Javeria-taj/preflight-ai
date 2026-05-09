@@ -35,7 +35,7 @@ export default function LandingPage() {
               <a className="btn ghost large" href="#how">How it works ↓</a>
             </div>
             <div className="hero-stat-row">
-              <div className="hero-stat"><div className="v red">3:00:00</div><div className="l">attack window</div></div>
+              <div className="hero-stat"><div className="v red">3:00:00</div><div className="l"><span style={{ color: 'var(--accent-block)' }}>attack</span> window</div></div>
               <div className="hero-stat"><div className="v">0</div><div className="l">tools caught it</div></div>
               <div className="hero-stat"><div className="v green">00:00:30</div><div className="l">preflight time</div></div>
             </div>
@@ -118,7 +118,7 @@ export default function LandingPage() {
       <section className="section tight">
         <div className="container narrow" style={{ textAlign: 'center', padding: '24px 0' }}>
           <div className="eyebrow" style={{ justifyContent: 'center' }}>three minutes from now</div>
-          <h2 style={{ marginBottom: 16, fontSize: 'clamp(28px, 4vw, 52px)' }}>Run the exact attack. See the block.</h2>
+          <h2 style={{ marginBottom: 16, fontSize: 'clamp(28px, 4vw, 52px)' }}>Run the exact <span style={{ color: 'var(--accent-block)' }}>attack</span>. See the block.</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: 16, marginBottom: 24, maxWidth: '54ch', margin: '0 auto 24px' }}>
             We pre-loaded the actual axios 1.7.9 → 1.7.10 payload from the March 31 incident. Click run. Watch Preflight catch it.
           </p>

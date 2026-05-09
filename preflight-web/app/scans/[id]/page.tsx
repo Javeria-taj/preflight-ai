@@ -64,7 +64,7 @@ export default function ScanDetailPage() {
         </p>
         <div style={{ marginTop: 22, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
           <div style={{ padding: '10px 16px', border: '1px solid var(--accent-block)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-            <span style={{ color: 'var(--text-muted)' }}>attack_pattern: </span>
+            <span style={{ color: 'var(--accent-block)' }}>attack_pattern: </span>
             <strong style={{ color: 'var(--accent-block)' }}>{s.attackPattern}</strong>
           </div>
         </div>
