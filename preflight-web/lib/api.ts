@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://preflight-api.onrender.com';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://preflight-ai.onrender.com';
 
 // ─── TypeScript Types ───────────────────────────────────────────────────────
 

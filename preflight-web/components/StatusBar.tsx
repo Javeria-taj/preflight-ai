@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { getScanStats } from "../lib/api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://preflight-api.onrender.com";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://preflight-ai.onrender.com";
 
 export function StatusBar() {
   const [scanRate, setScanRate] = useState(127);
