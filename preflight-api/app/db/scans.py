@@ -4,6 +4,7 @@ from bson import ObjectId
 from app.db.client import get_db
 
 DEMO_SCAN_ID = "64a7f3e2b1c4d5e6f7a8b9c0"
+WARN_DEMO_SCAN_ID = "64a7f3e2b1c4d5e6f7a8b9c1"
 
 _DEMO_SCAN = {
     "_id": ObjectId(DEMO_SCAN_ID),
@@ -47,6 +48,52 @@ _DEMO_SCAN = {
         },
     },
     "duration_ms": 2840,
+    "scanned_at": datetime.now(timezone.utc),
+    "created_at": datetime.now(timezone.utc),
+}
+
+
+_WARN_DEMO_SCAN = {
+    "_id": ObjectId(WARN_DEMO_SCAN_ID),
+    "package_name": "colors",
+    "old_version": "1.4.0",
+    "new_version": "1.4.1",
+    "verdict": "WARN",
+    "confidence": 0.68,
+    "repo": None,
+    "pr_number": None,
+    "is_demo": True,
+    "signals": {
+        "script_diff": {
+            "flagged": True,
+            "new_hooks": [],
+            "changed_hooks": ["postinstall"],
+            "reason": "Existing postinstall hook body changed in 1.4.1",
+        },
+        "ast_scan": {
+            "flagged": False,
+            "patterns": [],
+            "severity": "none",
+            "reason": "No outbound network calls or dangerous patterns detected",
+        },
+        "maintainer": {
+            "flagged": False,
+            "risk_score": 15,
+            "key_changed": False,
+            "inactive_days": 12,
+            "reason": "Active maintainer, provenance intact",
+        },
+        "llm_reasoning": {
+            "verdict": "WARN",
+            "confidence": 0.68,
+            "summary": (
+                "Install hook modified but no outbound network calls detected. "
+                "Recommend reviewing the hook diff before merging."
+            ),
+            "attack_pattern": None,
+        },
+    },
+    "duration_ms": 1870,
     "scanned_at": datetime.now(timezone.utc),
     "created_at": datetime.now(timezone.utc),
 }
@@ -185,6 +232,13 @@ async def seed_demo_data() -> None:
     existing = await db.scans.find_one({"_id": ObjectId(DEMO_SCAN_ID)})
     if not existing:
         await db.scans.insert_one(_DEMO_SCAN)
+
+
+async def seed_warn_demo_data() -> None:
+    db = get_db()
+    existing = await db.scans.find_one({"_id": ObjectId(WARN_DEMO_SCAN_ID)})
+    if not existing:
+        await db.scans.insert_one(_WARN_DEMO_SCAN)
 
 
 async def seed_community_scans() -> None:

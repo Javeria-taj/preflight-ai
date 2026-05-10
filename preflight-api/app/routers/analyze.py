@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 
 from app.db import scans as scans_db, packages as packages_db
-from app.db.scans import DEMO_SCAN_ID
+from app.db.scans import DEMO_SCAN_ID, WARN_DEMO_SCAN_ID
 from app.errors import PackageNotFoundError, RegistryTimeoutError
 from app.schemas.analysis import (
     AnalyzeRequest,
@@ -29,12 +29,15 @@ _DEMO_SIGNAL_DELAYS = [0.5, 0.7, 0.6, 0.9]
 
 # Auto-trigger demo for the axios attack scenario — 1.7.10 doesn't exist on real npm
 _DEMO_AUTO_TRIGGER = {("axios", "1.7.9", "1.7.10")}
+# Auto-trigger WARN demo — colors 1.4.1 was a real sabotage incident (Marak, Jan 2022)
+_WARN_AUTO_TRIGGER = {("colors", "1.4.0", "1.4.1")}
 
 
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(req: AnalyzeRequest):
     # Demo mode — return pre-seeded result with staggered artificial delays
-    is_demo = req.demo or (req.package_name, req.old_version, req.new_version) in _DEMO_AUTO_TRIGGER
+    trigger_key = (req.package_name, req.old_version, req.new_version)
+    is_demo = req.demo or trigger_key in _DEMO_AUTO_TRIGGER
     if is_demo:
         for delay in _DEMO_SIGNAL_DELAYS:
             await asyncio.sleep(delay)
@@ -44,6 +47,26 @@ async def analyze(req: AnalyzeRequest):
         sig = scan["signals"]
         return AnalyzeResponse(
             scan_id=DEMO_SCAN_ID,
+            verdict=scan["verdict"],
+            confidence=scan["confidence"],
+            duration_ms=scan["duration_ms"],
+            signals=SignalsResponse(
+                script_diff=ScriptDiffSignal(**sig["script_diff"]),
+                ast_scan=AstScanSignal(**sig["ast_scan"]),
+                maintainer=MaintainerSignal(**sig["maintainer"]),
+                llm_reasoning=LlmReasoningSignal(**sig["llm_reasoning"]),
+            ),
+        )
+
+    if trigger_key in _WARN_AUTO_TRIGGER:
+        for delay in _DEMO_SIGNAL_DELAYS[:3]:
+            await asyncio.sleep(delay)
+        scan = await scans_db.get_scan(WARN_DEMO_SCAN_ID)
+        if not scan:
+            raise HTTPException(status_code=500, detail="Warn demo data not seeded")
+        sig = scan["signals"]
+        return AnalyzeResponse(
+            scan_id=WARN_DEMO_SCAN_ID,
             verdict=scan["verdict"],
             confidence=scan["confidence"],
             duration_ms=scan["duration_ms"],

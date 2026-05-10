@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.settings import settings
 from app.db import client as db_client
-from app.db.scans import seed_demo_data, seed_community_scans
+from app.db.scans import seed_demo_data, seed_community_scans, seed_warn_demo_data
 from app.routers import analyze, scans, packages
 from app.schemas.analysis import HealthResponse, HealthChecks
 
@@ -15,6 +15,7 @@ from app.schemas.analysis import HealthResponse, HealthChecks
 async def lifespan(app: FastAPI):
     await db_client.connect()
     await seed_demo_data()
+    await seed_warn_demo_data()
     await seed_community_scans()
     yield
     await db_client.disconnect()
