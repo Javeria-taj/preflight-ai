@@ -1,5 +1,5 @@
 import * as fs from "fs";
-import { LockfileParseError } from "../errors/index.js";
+import { LockfileParseError, LockfileNotFoundError } from "../errors/index.js";
 
 export interface ChangedDep {
   name: string;
@@ -14,14 +14,14 @@ interface LockV2 {
 
 export function parseChangedDeps(lockfilePath: string, baseLockfilePath?: string): ChangedDep[] {
   if (!fs.existsSync(lockfilePath)) {
-    throw new LockfileParseError(lockfilePath);
+    throw new LockfileNotFoundError(lockfilePath);
   }
 
   let current: LockV2;
   try {
     current = JSON.parse(fs.readFileSync(lockfilePath, "utf8"));
-  } catch {
-    throw new LockfileParseError(lockfilePath);
+  } catch (err) {
+    throw new LockfileParseError(lockfilePath, err instanceof Error ? err.message : String(err));
   }
 
   // When running inside GitHub Actions, the base lockfile comes from git diff.

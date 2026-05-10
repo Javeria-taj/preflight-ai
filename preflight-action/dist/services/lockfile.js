@@ -38,14 +38,14 @@ const fs = __importStar(require("fs"));
 const index_js_1 = require("../errors/index.js");
 function parseChangedDeps(lockfilePath, baseLockfilePath) {
     if (!fs.existsSync(lockfilePath)) {
-        throw new index_js_1.LockfileParseError(lockfilePath);
+        throw new index_js_1.LockfileNotFoundError(lockfilePath);
     }
     let current;
     try {
         current = JSON.parse(fs.readFileSync(lockfilePath, "utf8"));
     }
-    catch {
-        throw new index_js_1.LockfileParseError(lockfilePath);
+    catch (err) {
+        throw new index_js_1.LockfileParseError(lockfilePath, err instanceof Error ? err.message : String(err));
     }
     // When running inside GitHub Actions, the base lockfile comes from git diff.
     // If no base is provided, treat every direct dep as new.

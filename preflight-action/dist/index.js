@@ -226,7 +226,7 @@ function loadEnv() {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.LockfileParseError = exports.ApiUnreachableError = exports.ApiTimeoutError = void 0;
+exports.LockfileParseError = exports.LockfileNotFoundError = exports.ApiUnreachableError = exports.ApiTimeoutError = void 0;
 class ApiTimeoutError extends Error {
     constructor(pkg) {
         super(`Preflight API timed out for ${pkg}`);
@@ -241,9 +241,16 @@ class ApiUnreachableError extends Error {
     }
 }
 exports.ApiUnreachableError = ApiUnreachableError;
-class LockfileParseError extends Error {
+class LockfileNotFoundError extends Error {
     constructor(path) {
-        super(`Failed to parse lockfile: ${path}`);
+        super(`Lockfile not found at: ${path}\nDid you forget to run 'actions/checkout' before this step, or are you using a different package manager?`);
+        this.name = "LockfileNotFoundError";
+    }
+}
+exports.LockfileNotFoundError = LockfileNotFoundError;
+class LockfileParseError extends Error {
+    constructor(path, originalMessage) {
+        super(`Failed to parse lockfile at ${path}. Is it valid JSON? Error: ${originalMessage}`);
         this.name = "LockfileParseError";
     }
 }
@@ -427,14 +434,14 @@ const fs = __importStar(__nccwpck_require__(9896));
 const index_js_1 = __nccwpck_require__(5389);
 function parseChangedDeps(lockfilePath, baseLockfilePath) {
     if (!fs.existsSync(lockfilePath)) {
-        throw new index_js_1.LockfileParseError(lockfilePath);
+        throw new index_js_1.LockfileNotFoundError(lockfilePath);
     }
     let current;
     try {
         current = JSON.parse(fs.readFileSync(lockfilePath, "utf8"));
     }
-    catch {
-        throw new index_js_1.LockfileParseError(lockfilePath);
+    catch (err) {
+        throw new index_js_1.LockfileParseError(lockfilePath, err instanceof Error ? err.message : String(err));
     }
     // When running inside GitHub Actions, the base lockfile comes from git diff.
     // If no base is provided, treat every direct dep as new.
