@@ -70,7 +70,7 @@ export function ScanCard({ scan, expanded, onToggle, isNew }: any) {
                 View advisory ↗
               </a>
             ) : (
-              <Link className="btn ghost" href={`/scans/${scan.id}`} onClick={(e) => e.stopPropagation()}>
+              <Link className="btn ghost" href={`/scans?id=${scan.id}`} onClick={(e) => e.stopPropagation()}>
                 View full scan →
               </Link>
             )}

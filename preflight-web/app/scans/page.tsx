@@ -1,6 +1,6 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import React, { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { ConfidenceBar } from "@/components/ConfidenceBar";
 import { getScan, normalizeScan, ScanDetail, SignalsResponse } from "@/lib/api";
@@ -50,8 +50,10 @@ function buildLiveSignals(signals: SignalsResponse) {
   ];
 }
 
-export default function ScanDetailPage() {
-  const { id } = useParams<{ id: string }>();
+function ScanDetailContent() {
+  const searchParams = useSearchParams();
+  const id = searchParams.get("id");
+
   const [rawScan, setRawScan] = useState<ScanDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<'not_found' | 'timeout' | null>(null);
@@ -86,7 +88,6 @@ export default function ScanDetailPage() {
 
   if (loading) return (
     <div className="scan-detail">
-      {/* Full skeleton layout — preserves height, no layout shift */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
         <div style={{ width: 120, height: 12, background: 'var(--bg-surface)', animation: 'skeletonPulse 1.4s ease-in-out infinite', borderRadius: 2 }} />
         <div style={{ width: 200, height: 12, background: 'var(--bg-surface)', animation: 'skeletonPulse 1.4s ease-in-out infinite', borderRadius: 2 }} />
@@ -131,7 +132,7 @@ export default function ScanDetailPage() {
           <div className="meta-row"><VerdictBadge verdict={s.verdict} /><span style={{fontFamily:'var(--font-mono)', fontSize: 12, color: 'var(--accent-block)'}}>● {s.signals.filter((sig: any) => sig.flagged).length} / 4 signals flagged</span></div>
           <div className="pkg">
             <span className="name">{s.package}</span>
-            {s.from ? <span style={{color:'var(--text-secondary)'}}>{s.from}</span> : <span style={{color:'var(--text-muted)'}}>[new dependency]</span>}
+            {s.from ? <span style={{color:'var(--text-secondary)'}}>{s.from}</span> : <span style={{color:'var(--text-muted)'}}>[ new dependency]</span>}
             <span style={{color:'var(--text-muted)'}}>→</span>
             <span style={{color:'var(--accent-block)'}}>{s.to}</span>
           </div>
@@ -237,7 +238,7 @@ export default function ScanDetailPage() {
                     <div className="diff-block">
                       <div className="diff-block-head">
                         <span>{sig.num === '01' ? 'package.json' : './_postinstall.js'} · diff</span>
-                        <span style={{color: 'var(--accent-block)'}}>+{sig.diff.filter((d: any) => d.type==='add').length} added</span>
+                        <span style={{ color: 'var(--accent-block)' }}>+{sig.diff.filter((d: any) => d.type === 'add').length} added</span>
                       </div>
                       {sig.diff.map((d: any, k: number) => (
                         <div key={k} className={`diff-row ${d.type} ${d.flag ? 'flag' : ''}`}>
@@ -263,7 +264,7 @@ export default function ScanDetailPage() {
         </div>
       </div>
 
-      {/* IOCs — rendered for any scan that has flagged AST signals */}
+      {/* IOCs */}
       {s.iocs && s.iocs.length > 0 && (
         <div>
           <div className="eyebrow" style={{ marginBottom: 14 }}>indicators of compromise · {s.iocs.length} matches</div>
@@ -279,7 +280,7 @@ export default function ScanDetailPage() {
         </div>
       )}
 
-      {/* PR COMMENT — shown for BLOCK or WARN verdicts */}
+      {/* PR COMMENT */}
       {(s.verdict === 'BLOCK' || s.verdict === 'WARN') && (
         <div>
           <div className="eyebrow" style={{ marginBottom: 14 }}>posted to github pr #{s.pr ?? '—'}</div>
@@ -292,10 +293,8 @@ export default function ScanDetailPage() {
             </div>
             <div className="pr-comment-body">
               <h4>🔴 Preflight: {s.verdict} — Dependency Update Intercepted</h4>
-              <div><strong style={{color:'var(--text-primary)'}}>{s.package}</strong> <span className="text-muted">{s.from ?? '[new]'} → {s.to}</span> · Confidence: <span style={{color:'var(--accent-block)', fontWeight: 700}}>{Math.round(s.confidence * 100)}%</span> · <span className="text-muted">{s.duration ?? '—'}ms</span></div>
-              <div className="quote">
-                {s.summary}
-              </div>
+              <div><strong style={{ color: 'var(--text-primary)' }}>{s.package}</strong> <span className="text-muted">{s.from ?? '[new]'} → {s.to}</span> · Confidence: <span style={{ color: 'var(--accent-block)', fontWeight: 700 }}>{Math.round(s.confidence * 100)}%</span> · <span className="text-muted">{s.duration ?? '—'}ms</span></div>
+              <div className="quote">{s.summary}</div>
               <div style={{ marginTop: 12, color: 'var(--text-secondary)' }}>
                 ❌ Do NOT merge · 🔍 Review manually · 📢 Report to npm security
               </div>
@@ -304,5 +303,17 @@ export default function ScanDetailPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ScanDetailPage() {
+  return (
+    <Suspense fallback={
+      <div className="scan-detail" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+        <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>Loading scan data...</div>
+      </div>
+    }>
+      <ScanDetailContent />
+    </Suspense>
   );
 }
