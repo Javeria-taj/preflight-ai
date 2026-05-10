@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 from app.db.client import get_db
@@ -231,14 +232,15 @@ async def list_scans(page: int = 1, limit: int = 20) -> list[dict]:
 
 async def get_scan_stats() -> dict:
     db = get_db()
-    total = await db.scans.count_documents({"is_demo": {"$ne": True}})
-    blocked = await db.scans.count_documents({"is_demo": {"$ne": True}, "verdict": "BLOCK"})
-    unique_repos = len(await db.scans.distinct("repo", {"is_demo": {"$ne": True}, "repo": {"$ne": None}}))
-    
-    # Calculate an approximate rate based on timestamps
-    cursor = db.scans.find({"is_demo": {"$ne": True}}).sort([("scanned_at", -1)]).limit(100)
-    recent_scans = await cursor.to_list(length=100)
-    
+    recent_cursor = db.scans.find({"is_demo": {"$ne": True}}).sort([("scanned_at", -1)]).limit(100)
+    total, blocked, repos, recent_scans = await asyncio.gather(
+        db.scans.count_documents({"is_demo": {"$ne": True}}),
+        db.scans.count_documents({"is_demo": {"$ne": True}, "verdict": "BLOCK"}),
+        db.scans.distinct("repo", {"is_demo": {"$ne": True}, "repo": {"$ne": None}}),
+        recent_cursor.to_list(100),
+    )
+    unique_repos = len(repos)
+
     rate_per_min = 0
     if len(recent_scans) > 1:
         newest = recent_scans[0]["scanned_at"]
@@ -246,14 +248,13 @@ async def get_scan_stats() -> dict:
         delta_mins = (newest - oldest).total_seconds() / 60.0
         if delta_mins > 0:
             rate_per_min = int(len(recent_scans) / delta_mins)
-            
-    # Default to a baseline if not enough data
+
     if rate_per_min == 0 and total > 0:
         rate_per_min = 127
-        
+
     return {
         "total_scans": total,
         "blocked_threats": blocked,
         "unique_repos": unique_repos,
-        "scan_rate_per_min": rate_per_min
+        "scan_rate_per_min": rate_per_min,
     }

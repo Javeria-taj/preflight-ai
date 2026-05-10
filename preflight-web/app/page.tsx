@@ -6,7 +6,7 @@ import { StatCounter } from "@/components/StatCounter";
 import { Footer } from "@/components/Footer";
 import { Magnetic } from "@/components/Magnetic";
 import { HOW_STEPS, SIGNAL_INFO, INSTALL_YAML } from "@/lib/data";
-import { getScanStats } from "@/lib/api";
+import { getScanStats, getScans } from "@/lib/api";
 import Link from "next/link";
 
 export default function LandingPage() {
@@ -23,11 +23,21 @@ export default function LandingPage() {
   }, []);
 
   useEffect(() => {
-    getScanStats().then(stats => {
-      setScanCount(stats.total_scans);
-      setBlockCount(stats.blocked_threats);
-      setRepoCount(stats.unique_repos);
-    }).catch(() => {});
+    getScanStats()
+      .then(stats => {
+        setScanCount(stats.total_scans);
+        setBlockCount(stats.blocked_threats);
+        setRepoCount(stats.unique_repos);
+      })
+      .catch(() => {
+        // Fallback: compute stats from the scans list endpoint
+        getScans(1, 100).then(data => {
+          const scans = data.scans;
+          setScanCount(scans.length);
+          setBlockCount(scans.filter(s => s.verdict === 'BLOCK').length);
+          setRepoCount(new Set(scans.map(s => s.repo).filter(Boolean)).size);
+        }).catch(() => {});
+      });
     const t = setInterval(() => setScanCount(c => c + 1), 15000);
     return () => clearInterval(t);
   }, []);

@@ -254,7 +254,7 @@ export interface ScanStatsResponse {
 
 export async function getScanStats(): Promise<ScanStatsResponse> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
   try {
     const res = await fetch(`${API_URL}/scans/stats`, { signal: controller.signal });
     clearTimeout(timeoutId);
