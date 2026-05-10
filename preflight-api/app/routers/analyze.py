@@ -29,8 +29,11 @@ _DEMO_SIGNAL_DELAYS = [0.5, 0.7, 0.6, 0.9]
 
 # Auto-trigger demo for the axios attack scenario — 1.7.10 doesn't exist on real npm
 _DEMO_AUTO_TRIGGER = {("axios", "1.7.9", "1.7.10")}
-# Auto-trigger WARN demo — colors 1.4.1 was a real sabotage incident (Marak, Jan 2022)
-_WARN_AUTO_TRIGGER = {("colors", "1.4.0", "1.4.1")}
+# Auto-trigger WARN demo — colors & node-ipc are real sabotage incidents
+_WARN_AUTO_TRIGGER = {
+    ("colors", "1.4.0", "1.4.1"),
+    ("node-ipc", None, "10.1.1"),
+}
 
 
 @router.post("/analyze", response_model=AnalyzeResponse)
